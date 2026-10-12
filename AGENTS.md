@@ -8,3 +8,7 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+## Dashboard prototype
+
+- Keep the Executive Summary's reference metrics and canned assistant replies in a browser-safe data module, with chart rendering and transient chat state in the page, so this demo remains deterministic and backend-free.
