@@ -80,7 +80,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "AUXO Analytics" },
       { name: "description", content: "AUXO Executive Summary analytics demo." },
-      { author: "AUXO Analytics" },
+      { name: "author", content: "AUXO Analytics" },
       { property: "og:title", content: "AUXO Analytics" },
       { property: "og:description", content: "AUXO Executive Summary analytics demo." },
       { property: "og:type", content: "website" },

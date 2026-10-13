@@ -510,7 +510,7 @@ function KpiCard({
                 <p className="mt-1 text-sm font-semibold tabular-nums">{metric.current}</p>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] tabular-nums">
                   <span>{metric.prior}</span>
-                  <span className={`inline-flex items-center gap-0.5 whitespace-nowrap font-medium ${metric.direction === "up" ? "text-green-700" : "text-orange-700"}`}>
+                  <span className={`inline-flex items-center gap-0.5 whitespace-nowrap font-medium ${metric.direction === "up" ? "text-trend-up" : "text-trend-down"}`}>
                     {metric.change}<UpIcon size={12} strokeWidth={2.7} />
                   </span>
                 </div>
