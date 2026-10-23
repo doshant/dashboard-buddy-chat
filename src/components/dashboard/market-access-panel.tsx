@@ -33,25 +33,7 @@ import {
   valueLabel,
   type Series,
 } from "@/components/dashboard/chart-theme";
-import { funnel, kpis } from "@/lib/dashboard-data";
-import {
-  administeredByPhase,
-  averageOopPerDose,
-  conversion,
-  inventory,
-  marketAccessKpis,
-  newPatientsByGoods,
-  payerMixPaidDoses,
-  payerMixReferred,
-  priorAuth,
-  referralOutcomes,
-  restarts,
-  stopReasons,
-  stops,
-  timeToTherapy,
-  timeToTherapySummary,
-  vialsAdministered,
-} from "@/lib/market-access-data";
+import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 
 const outcomeColors = {
   paid: "series-1",
@@ -66,9 +48,34 @@ const timeSeries: Series[] = [
 ];
 
 export function MarketAccessPanel() {
+  const { launch, marketAccess, period } = useDashboardData();
+  const { funnel, kpis } = launch;
+  const {
+    administeredByPhase,
+    averageOopPerDose,
+    conversion,
+    inventory,
+    marketAccessKpis,
+    newPatientsByGoods,
+    payerMixPaidDoses,
+    payerMixReferred,
+    priorAuth,
+    referralOutcomes,
+    restarts,
+    stopReasons,
+    stops,
+    timeToTherapy,
+    timeToTherapySummary,
+    vialsAdministered,
+  } = marketAccess;
   const { administered, inventory: channel } = marketAccessKpis;
   const firstCohort = timeToTherapy[0];
   const lastCohort = timeToTherapy[timeToTherapy.length - 1];
+  const cohortTrend = (key: "firstApprovedPa" | "firstDose") =>
+    firstCohort && lastCohort && firstCohort !== lastCohort
+      ? `${lastCohort.month} referrals ${lastCohort[key]} days, down from ${firstCohort[key]} in ${firstCohort.month}`
+      : `${lastCohort?.month} referrals ${lastCohort?.[key]} days`;
+  const paidDosesSinceLaunch = payerMixPaidDoses.reduce((acc, row) => acc + row.doses, 0);
 
   return (
     <>
@@ -77,10 +84,10 @@ export function MarketAccessPanel() {
         className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
       >
         <StatCard
-          title="Vials Administered"
+          title={`Vials Administered · ${period.short}`}
           Icon={Syringe}
           value={administered.total.toString()}
-          detail={`Paid ${administered.paid} · Free ${administered.free} · Loading ${administered.loading} / Maint. ${administered.maintenance}`}
+          detail={`Paid ${administered.paid} · Free ${administered.free} ${period.long}`}
           comparison={{
             text: `${administered.latestMonth} in Sep · ${channel.total} still in channel`,
           }}
@@ -117,7 +124,7 @@ export function MarketAccessPanel() {
           value={`${timeToTherapySummary.firstApprovedPa.median} days`}
           detail={`Median from referral · mean ${timeToTherapySummary.firstApprovedPa.mean} days · all payers`}
           comparison={{
-            text: `Aug referrals ${lastCohort?.firstApprovedPa} days, down from ${firstCohort?.firstApprovedPa} in Jan`,
+            text: cohortTrend("firstApprovedPa"),
             direction: "up",
           }}
         />
@@ -127,7 +134,7 @@ export function MarketAccessPanel() {
           value={`${timeToTherapySummary.firstDose.median} days`}
           detail={`Median from referral · mean ${timeToTherapySummary.firstDose.mean} days · ${timeToTherapySummary.firstDose.patients} non-EAP starts`}
           comparison={{
-            text: `Aug referrals ${lastCohort?.firstDose} days, down from ${firstCohort?.firstDose} in Jan`,
+            text: cohortTrend("firstDose"),
             direction: "up",
           }}
         />
@@ -136,7 +143,7 @@ export function MarketAccessPanel() {
           Icon={Wallet}
           value={`$${averageOopPerDose}`}
           detail="Patient coinsurance after foundation / copay support"
-          comparison={{ text: `Across ${administered.paid} paid doses` }}
+          comparison={{ text: `Across ${paidDosesSinceLaunch} paid doses since launch` }}
         />
         <StatCard
           title="Patient Restarts"
@@ -153,7 +160,7 @@ export function MarketAccessPanel() {
       >
         <DashboardPanel
           title="Vials Administered"
-          subtitle="One vial per intrathecal dose · paid vs free"
+          subtitle={`One vial per dose · paid vs free · ${period.long}`}
           className="col-span-12 xl:col-span-8"
         >
           <StackedMonthlyBars
@@ -167,7 +174,7 @@ export function MarketAccessPanel() {
 
         <DashboardPanel
           title="Doses by Phase & Program"
-          subtitle={`New (loading) vs continuing (maintenance) · ${administered.total} doses`}
+          subtitle={`New (loading) vs continuing (maintenance) · ${administered.sinceLaunch} doses since launch`}
           className="col-span-12 md:col-span-6 xl:col-span-4"
         >
           <StackedCategoryBars
@@ -188,7 +195,7 @@ export function MarketAccessPanel() {
 
         <DashboardPanel
           title="Referral Outcomes"
-          subtitle={`All ${funnel.referred} referred patients · conversion to therapy and to paid`}
+          subtitle={`All ${funnel.referred} patients referred since launch · conversion to therapy and to paid`}
           className="col-span-12 md:col-span-6 xl:col-span-5"
         >
           <div
@@ -359,7 +366,7 @@ export function MarketAccessPanel() {
 
         <DashboardPanel
           title="Payer Mix · Paid Doses"
-          subtitle={`${administered.paid} paid doses administered, by payer`}
+          subtitle={`${paidDosesSinceLaunch} paid doses administered since launch, by payer`}
           className="col-span-12 md:col-span-6"
         >
           <RankedBars

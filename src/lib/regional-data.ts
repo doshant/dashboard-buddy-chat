@@ -1,0 +1,469 @@
+import { nationalReferralRaw, type ReferralRaw } from "@/lib/executive-data";
+import { fieldRegions, nationalFieldRaw, type FieldRaw } from "@/lib/field-data";
+import { nationalLaunchRaw, sum, type LaunchRaw } from "@/lib/launch-data";
+import { nationalMarketAccessRaw, type MarketAccessRaw } from "@/lib/market-access-data";
+import {
+  nationalMarketingRaw,
+  regions as marketingRegions,
+  type MarketingRaw,
+} from "@/lib/marketing-data";
+import { allocate, regionNames, splitAmount, splitFlow, type RegionName } from "@/lib/scope";
+
+// Splits the national raw inputs between the four regions. Every split is exact, so each month's
+// regional values add back to the national value. Linked figures are split in order so they stay
+// consistent inside a region: first doses match new patient starts, the referral funnel never
+// widens, pending and cancelled patients fill each funnel gap, and channel inventory never goes
+// negative. Medians (time to therapy, days pending) can't be split and stay national.
+
+export type DashboardRaw = {
+  launch: LaunchRaw;
+  marketAccess: MarketAccessRaw;
+  field: FieldRaw;
+  marketing: MarketingRaw;
+  referrals: ReferralRaw;
+};
+
+export const nationalRaw: DashboardRaw = {
+  launch: nationalLaunchRaw,
+  marketAccess: nationalMarketAccessRaw,
+  field: nationalFieldRaw,
+  marketing: nationalMarketingRaw,
+  referrals: nationalReferralRaw,
+};
+
+const R = regionNames.length;
+const byRegion = <T>(make: (r: number) => T) => Array.from({ length: R }, (_, r) => make(r));
+const column = <T, K extends keyof T>(rows: T[], key: K) => rows.map((row) => row[key] as number);
+const at = (values: number[] | undefined, r: number) => values?.[r] ?? 0;
+
+// Splits several national parts between regions whose totals are already fixed, one part at a
+// time, so each region's parts add up to its total. The last part takes whatever is left.
+function cascade(parts: number[], totals: number[]): number[][] {
+  const left = [...totals];
+  return parts.map((part, p) => {
+    const split = p === parts.length - 1 ? [...left] : allocate(part, left);
+    split.forEach((value, r) => {
+      left[r] = at(left, r) - value;
+    });
+    return split;
+  });
+}
+
+// Patients and sales follow where prescribers are (12 / 8 / 7 / 11 of 38).
+const patientWeights = fieldRegions.map((row) => row.prescribers);
+const regionIndex = (region: string) => regionNames.indexOf(region as RegionName);
+
+function splitLaunch() {
+  const raw = nationalLaunchRaw;
+  const months = raw.monthlyVials.map((row) => row.month);
+
+  const vials = {
+    paid: splitFlow(column(raw.monthlyVials, "paid"), patientWeights),
+    free: splitFlow(column(raw.monthlyVials, "free"), patientWeights),
+    budget: splitFlow(column(raw.monthlyVials, "budget"), patientWeights),
+    le: splitFlow(column(raw.monthlyVials, "le"), patientWeights),
+  };
+  const forecast = raw.monthlyVials.map((row) => splitAmount(row.forecastNetSales, patientWeights));
+
+  const eap = splitFlow(column(raw.newPatients, "eapTransition"), patientWeights);
+  const newToBrand = splitFlow(column(raw.newPatients, "newToBrand"), patientWeights);
+
+  // Funnel: first doses are the region's starts; each step above adds its share of the drop-off.
+  const f = raw.funnel;
+  const firstDose = byRegion((r) => sum(eap[r] ?? []) + sum(newToBrand[r] ?? []));
+  const paApproved = firstDose.map(
+    (v, r) => v + at(allocate(f.paApproved - f.firstDose, patientWeights), r),
+  );
+  const benefitsVerified = paApproved.map(
+    (v, r) => v + at(allocate(f.benefitsVerified - f.paApproved, patientWeights), r),
+  );
+  const referred = benefitsVerified.map(
+    (v, r) => v + at(allocate(f.referred - f.benefitsVerified, patientWeights), r),
+  );
+  const secondDose = allocate(f.secondDose, firstDose);
+  const maintenance = allocate(f.maintenance, secondDose);
+
+  // Each funnel gap holds the step's pending patients plus those cancelled there.
+  const nationalPending = raw.pendingByStep;
+  const stepSplit = (
+    gap: number[],
+    cancelled: number,
+    aging: typeof nationalPending.lpScheduling,
+  ) => {
+    const cancelledSplit = allocate(cancelled, gap);
+    const pending = gap.map((g, r) => g - at(cancelledSplit, r));
+    const [d0to14, d15to30, d31plus] = cascade(
+      [aging.d0to14, aging.d15to30, aging.d31plus],
+      pending,
+    );
+    return {
+      cancelled: cancelledSplit,
+      aging: byRegion((r) => ({
+        d0to14: at(d0to14, r),
+        d15to30: at(d15to30, r),
+        d31plus: at(d31plus, r),
+      })),
+    };
+  };
+  const agingTotal = (a: { d0to14: number; d15to30: number; d31plus: number }) =>
+    a.d0to14 + a.d15to30 + a.d31plus;
+  const bv = stepSplit(
+    referred.map((v, r) => v - at(benefitsVerified, r)),
+    f.referred - f.benefitsVerified - agingTotal(nationalPending.benefitsVerification),
+    nationalPending.benefitsVerification,
+  );
+  const pa = stepSplit(
+    benefitsVerified.map((v, r) => v - at(paApproved, r)),
+    f.benefitsVerified - f.paApproved - agingTotal(nationalPending.priorAuthorization),
+    nationalPending.priorAuthorization,
+  );
+  const lp = stepSplit(
+    paApproved.map((v, r) => v - at(firstDose, r)),
+    f.paApproved - f.firstDose - agingTotal(nationalPending.lpScheduling),
+    nationalPending.lpScheduling,
+  );
+
+  // Active patients: September is starts less those off therapy; earlier months split directly.
+  const statusRows = raw.activeByStatus;
+  const lastMonth = statusRows.length - 1;
+  const nationalActive = statusRows.map(
+    (row) => row.commercial + row.quickStart + row.bridge + row.pap,
+  );
+  const offTherapyNational = f.firstDose - (nationalActive[lastMonth] ?? 0);
+  const offTherapy = allocate(offTherapyNational, firstDose);
+  const activeTotals = nationalActive.map((total, m) =>
+    m === lastMonth
+      ? firstDose.map((v, r) => v - at(offTherapy, r))
+      : allocate(total, patientWeights),
+  );
+  const status = statusRows.map((row, m) =>
+    cascade([row.commercial, row.quickStart, row.bridge, row.pap], activeTotals[m] ?? []),
+  );
+  const loading = raw.activePatientsTrend.map((row, m) =>
+    allocate(row.loading, activeTotals[m] ?? []),
+  );
+
+  const prescriberWeights = fieldRegions.map((row) => row.prescribers);
+  const newPrescribers = splitFlow(column(raw.prescribers, "new"), prescriberWeights);
+  const repeatPrescribers = raw.prescribers.map((row) => allocate(row.repeat, patientWeights));
+
+  const regions = byRegion<LaunchRaw>((r) => ({
+    monthlyVials: months.map((month, m) => ({
+      month,
+      paid: at(vials.paid[r], m),
+      free: at(vials.free[r], m),
+      budget: at(vials.budget[r], m),
+      le: at(vials.le[r], m),
+      forecastNetSales: at(forecast[m], r),
+    })),
+    activePatientsTrend: months.map((month, m) => ({
+      month,
+      loading: at(loading[m], r),
+      maintenance: at(activeTotals[m], r) - at(loading[m], r),
+    })),
+    activeByStatus: months.map((month, m) => ({
+      month,
+      commercial: at(status[m]?.[0], r),
+      quickStart: at(status[m]?.[1], r),
+      bridge: at(status[m]?.[2], r),
+      pap: at(status[m]?.[3], r),
+    })),
+    newPatients: months.map((month, m) => ({
+      month,
+      eapTransition: at(eap[r], m),
+      newToBrand: at(newToBrand[r], m),
+    })),
+    funnel: {
+      referred: at(referred, r),
+      benefitsVerified: at(benefitsVerified, r),
+      paApproved: at(paApproved, r),
+      firstDose: at(firstDose, r),
+      secondDose: at(secondDose, r),
+      maintenance: at(maintenance, r),
+    },
+    pendingByStep: {
+      benefitsVerification: bv.aging[r]!,
+      priorAuthorization: pa.aging[r]!,
+      lpScheduling: lp.aging[r]!,
+    },
+    pendingAvgDays: raw.pendingAvgDays,
+    prescribers: months.map((month, m) => ({
+      month,
+      new: at(newPrescribers[r], m),
+      repeat: at(repeatPrescribers[m], r),
+    })),
+  }));
+
+  const cancelledTotals = byRegion(
+    (r) => at(bv.cancelled, r) + at(pa.cancelled, r) + at(lp.cancelled, r),
+  );
+  return { regions, referred, firstDose, offTherapy, cancelledTotals, vials, eap, newToBrand };
+}
+
+function splitMarketAccess(launch: ReturnType<typeof splitLaunch>) {
+  const raw = nationalMarketAccessRaw;
+  const months = raw.vialsAdministered.map((row) => row.month);
+  const regionsLaunch = launch.regions;
+
+  // Channel inventory by month; September is each region's own sites plus its distributor share.
+  const shipped = nationalLaunchRaw.monthlyVials.map((row) => row.paid + row.free);
+  const administered = raw.vialsAdministered.map((row) => row.paid + row.free);
+  const nationalOnHand = shipped.map(
+    (_, m) => sum(shipped.slice(0, m + 1)) - sum(administered.slice(0, m + 1)),
+  );
+  const [distributorRow, ...siteRows] = raw.inventory;
+  const siteFor = (r: number) =>
+    siteRows.find((row) => regionIndex(row.location.replace(" sites", "")) === r);
+  const distributorTotal = (distributorRow?.paid ?? 0) + (distributorRow?.free ?? 0);
+  const distributor = allocate(distributorTotal, patientWeights);
+  const sites = byRegion((r) => (siteFor(r)?.paid ?? 0) + (siteFor(r)?.free ?? 0));
+  const onHand = nationalOnHand.map((total, m) =>
+    m === months.length - 1
+      ? byRegion((r) => at(distributor, r) + at(sites, r))
+      : allocate(total, patientWeights),
+  );
+
+  // Administered = shipped this month + stock carried in − stock carried out.
+  const shippedByRegion = byRegion((r) =>
+    months.map((_, m) => at(launch.vials.paid[r], m) + at(launch.vials.free[r], m)),
+  );
+  const adminTotals = months.map((_, m) =>
+    byRegion(
+      (r) => at(shippedByRegion[r], m) + (m > 0 ? at(onHand[m - 1], r) : 0) - at(onHand[m], r),
+    ),
+  );
+  const adminPaid = raw.vialsAdministered.map((row, m) => allocate(row.paid, adminTotals[m] ?? []));
+  const paidSinceLaunch = byRegion((r) => sum(adminPaid.map((month) => at(month, r))));
+  const adminSinceLaunch = byRegion((r) => sum(adminTotals.map((month) => at(month, r))));
+
+  const eapPatients = byRegion((r) => sum(launch.eap[r] ?? []));
+  const eapMaintenance = allocate(raw.eapMaintenanceDoses, eapPatients);
+
+  const goods = raw.newPatientsByGoods.map((row, m) =>
+    cascade(
+      [row.commercial, row.quickStart, row.bridge, row.pap],
+      byRegion((r) => at(launch.eap[r], m) + at(launch.newToBrand[r], m)),
+    ),
+  );
+  const payersReferred = cascade(
+    raw.payerMixReferred.map((row) => row.patients),
+    launch.referred,
+  );
+  const payersPaid = cascade(
+    raw.payerMixPaidDoses.map((row) => row.doses),
+    paidSinceLaunch,
+  );
+
+  const restarted = allocate(raw.restarts.patients, patientWeights);
+  const discontinuedTotals = byRegion((r) => at(launch.offTherapy, r) + at(restarted, r));
+  const stopCancelled = cascade(
+    raw.stopReasons.map((row) => row.cancelled),
+    launch.cancelledTotals,
+  );
+  const stopDiscontinued = cascade(
+    raw.stopReasons.map((row) => row.discontinued),
+    discontinuedTotals,
+  );
+  const distributorPaid = allocate(distributorRow?.paid ?? 0, distributor);
+
+  const regions = byRegion<MarketAccessRaw>((r) => ({
+    vialsAdministered: months.map((month, m) => ({
+      month,
+      paid: at(adminPaid[m], r),
+      free: at(adminTotals[m], r) - at(adminPaid[m], r),
+    })),
+    eapMaintenanceDoses: at(eapMaintenance, r),
+    newPatientsByGoods: raw.newPatientsByGoods.map((row, m) => ({
+      month: row.month,
+      commercial: at(goods[m]?.[0], r),
+      quickStart: at(goods[m]?.[1], r),
+      bridge: at(goods[m]?.[2], r),
+      pap: at(goods[m]?.[3], r),
+    })),
+    timeToTherapy: raw.timeToTherapy,
+    timeToTherapyMedians: raw.timeToTherapyMedians,
+    payerMixReferred: raw.payerMixReferred.map((row, p) => ({
+      payer: row.payer,
+      patients: at(payersReferred[p], r),
+    })),
+    payerMixPaidDoses: raw.payerMixPaidDoses.map((row, p) => ({
+      ...row,
+      doses: at(payersPaid[p], r),
+    })),
+    stopReasons: raw.stopReasons.map((row, p) => ({
+      reason: row.reason,
+      cancelled: at(stopCancelled[p], r),
+      discontinued: at(stopDiscontinued[p], r),
+    })),
+    restarts: { ...raw.restarts, patients: at(restarted, r) },
+    inventory: [
+      {
+        location: "Specialty distributor",
+        paid: at(distributorPaid, r),
+        free: at(distributor, r) - at(distributorPaid, r),
+      },
+      ...(siteFor(r) ? [siteFor(r)!] : []),
+    ],
+  }));
+  void regionsLaunch;
+  return { regions, adminSinceLaunch };
+}
+
+function splitField() {
+  const raw = nationalFieldRaw;
+  const callTotals = raw.months.map((row) => row.faceToFace + row.virtual + row.phone);
+  const callsByRegion = splitFlow(
+    callTotals,
+    fieldRegions.map((row) => row.calls),
+  );
+  const callTypes = raw.months.map((row, m) =>
+    cascade(
+      [row.faceToFace, row.virtual, row.phone],
+      byRegion((r) => at(callsByRegion[r], m)),
+    ),
+  );
+  const targeted = raw.months.map((row) =>
+    allocate(
+      row.targeted,
+      fieldRegions.map((x) => x.targeted),
+    ),
+  );
+  const reached = raw.months.map((row) =>
+    allocate(
+      row.reached,
+      fieldRegions.map((x) => x.reached),
+    ),
+  );
+  const prescribers = fieldRegions.map((row) => row.prescribers);
+  const repeat = allocate(raw.repeatPrescribers, prescribers);
+  const champions = allocate(raw.champions, repeat);
+
+  return byRegion<FieldRaw>((r) => ({
+    months: raw.months.map((row, m) => ({
+      ...row,
+      faceToFace: at(callTypes[m]?.[0], r),
+      virtual: at(callTypes[m]?.[1], r),
+      phone: at(callTypes[m]?.[2], r),
+      targeted: at(targeted[m], r),
+      reached: Math.min(at(reached[m], r), at(targeted[m], r)),
+    })),
+    repeatPrescribers: at(repeat, r),
+    champions: at(champions, r),
+  }));
+}
+
+function splitMarketing() {
+  const raw = nationalMarketingRaw;
+  const weight = (key: keyof (typeof marketingRegions)[number]) =>
+    marketingRegions.map((row) => row[key] as number);
+
+  // Split a monthly total with fixed regional weights, then its parts within each region.
+  const splitParts = (parts: number[][], weights: number[]) => {
+    const totals = splitFlow(
+      parts[0]!.map((_, m) => sum(parts.map((part) => part[m] ?? 0))),
+      weights,
+    );
+    return parts[0]!.map((_, m) =>
+      cascade(
+        parts.map((part) => part[m] ?? 0),
+        byRegion((r) => at(totals[r], m)),
+      ),
+    );
+  };
+
+  const channelKeys = ["display", "video", "social", "search", "other"] as const;
+  const impressions = splitParts(
+    channelKeys.map((key) => column(raw.impressions, key)),
+    weight("impressionsK"),
+  );
+  const clicks = splitFlow(column(raw.engagement, "clicks"), weight("clicks"));
+  const videoViews = splitFlow(column(raw.engagement, "videoViews"), weight("videoViews"));
+  const visits = splitParts(
+    [column(raw.website, "hcp"), column(raw.website, "patient")],
+    weight("visits"),
+  );
+  const hvaKeys = ["download", "repRequest", "signUp"] as const;
+  const hvas = splitParts(
+    hvaKeys.map((key) => column(raw.highValueActions, key)),
+    weight("hvas"),
+  );
+  const emailSplit = (
+    measure: "sent" | "bounced" | "opened" | "clicked" | "converted",
+    w: number[],
+  ) =>
+    splitParts(
+      [raw.email.map((row) => row.hcp[measure]), raw.email.map((row) => row.patient[measure])],
+      w,
+    );
+  const email = {
+    sent: emailSplit("sent", weight("delivered")),
+    bounced: emailSplit("bounced", weight("delivered")),
+    opened: emailSplit("opened", weight("opens")),
+    clicked: emailSplit("clicked", weight("emailClicks")),
+    converted: emailSplit("converted", weight("emailClicks")),
+  };
+  const emailFor = (m: number, r: number, a: number) => ({
+    sent: at(email.sent[m]?.[a], r),
+    bounced: at(email.bounced[m]?.[a], r),
+    opened: at(email.opened[m]?.[a], r),
+    clicked: at(email.clicked[m]?.[a], r),
+    converted: at(email.converted[m]?.[a], r),
+  });
+
+  return byRegion<MarketingRaw>((r) => ({
+    impressions: raw.impressions.map((row, m) => ({
+      month: row.month,
+      calendar: row.calendar,
+      display: at(impressions[m]?.[0], r),
+      video: at(impressions[m]?.[1], r),
+      social: at(impressions[m]?.[2], r),
+      search: at(impressions[m]?.[3], r),
+      other: at(impressions[m]?.[4], r),
+    })),
+    engagement: raw.engagement.map((_, m) => ({
+      clicks: at(clicks[r], m),
+      videoViews: at(videoViews[r], m),
+    })),
+    website: raw.website.map((_, m) => ({
+      hcp: at(visits[m]?.[0], r),
+      patient: at(visits[m]?.[1], r),
+    })),
+    highValueActions: raw.highValueActions.map((_, m) => ({
+      download: at(hvas[m]?.[0], r),
+      repRequest: at(hvas[m]?.[1], r),
+      signUp: at(hvas[m]?.[2], r),
+    })),
+    email: raw.email.map((_, m) => ({ hcp: emailFor(m, r, 0), patient: emailFor(m, r, 1) })),
+  }));
+}
+
+function splitReferrals(launch: ReturnType<typeof splitLaunch>) {
+  const referrals = splitFlow(nationalReferralRaw.referralsByMonth, launch.referred);
+  const cancellations = splitFlow(nationalReferralRaw.cancellationsByMonth, launch.cancelledTotals);
+  return byRegion<ReferralRaw>((r) => ({
+    referralsByMonth: referrals[r] ?? [],
+    cancellationsByMonth: cancellations[r] ?? [],
+  }));
+}
+
+function buildRegionalRaw(): Record<RegionName, DashboardRaw> {
+  const launch = splitLaunch();
+  const marketAccess = splitMarketAccess(launch);
+  const field = splitField();
+  const marketing = splitMarketing();
+  const referrals = splitReferrals(launch);
+  return Object.fromEntries(
+    regionNames.map((region, r) => [
+      region,
+      {
+        launch: launch.regions[r]!,
+        marketAccess: marketAccess.regions[r]!,
+        field: field[r]!,
+        marketing: marketing[r]!,
+        referrals: referrals[r]!,
+      },
+    ]),
+  ) as Record<RegionName, DashboardRaw>;
+}
+
+export const regionalRaw = buildRegionalRaw();

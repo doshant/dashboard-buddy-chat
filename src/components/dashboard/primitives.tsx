@@ -24,18 +24,54 @@ import {
 const topRadius: [number, number, number, number] = [4, 4, 0, 0];
 const endRadius: [number, number, number, number] = [0, 4, 4, 0];
 
+// Small monthly trend drawn beside a KPI value; scaled to its own min and max.
+export function Sparkline({
+  values,
+  label,
+  color = "var(--series-1)",
+  className = "h-7 w-24",
+}: {
+  values: number[];
+  label: string;
+  color?: string;
+  className?: string;
+}) {
+  const min = Math.min(...values);
+  const range = Math.max(...values) - min || 1;
+  const points = values.map((value, i) => {
+    const x = (i / Math.max(values.length - 1, 1)) * 100;
+    const y = 26 - ((value - min) / range) * 22;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  return (
+    <svg viewBox="0 0 100 28" preserveAspectRatio="none" role="img" aria-label={label} className={`shrink-0 overflow-visible ${className}`}>
+      <polygon points={`0,28 ${points.join(" ")} 100,28`} fill={color} opacity={0.1} />
+      <polyline
+        points={points.join(" ")}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
+}
+
 export function StatCard({
   title,
   Icon,
   value,
   detail,
   comparison,
+  trend,
 }: {
   title: string;
   Icon: LucideIcon;
   value: string;
   detail: string;
   comparison: { text: string; direction?: "up" | "down" };
+  trend?: { values: number[]; label: string };
 }) {
   const TrendIcon = comparison.direction === "up" ? ArrowUpRight : ArrowDownRight;
   const trendClass =
@@ -52,7 +88,14 @@ export function StatCard({
           <Icon size={15} strokeWidth={2.1} />
         </span>
       </div>
-      <p className="text-[26px] font-bold leading-none tabular-nums">{value}</p>
+      {trend ? (
+        <div className="flex items-end justify-between gap-3">
+          <p className="text-[26px] font-bold leading-none tabular-nums">{value}</p>
+          <Sparkline values={trend.values} label={trend.label} />
+        </div>
+      ) : (
+        <p className="text-[26px] font-bold leading-none tabular-nums">{value}</p>
+      )}
       <p className="text-[11px] leading-snug text-muted-foreground">{detail}</p>
       <p
         className={`mt-auto inline-flex items-center gap-0.5 text-[11px] font-medium tabular-nums ${trendClass}`}

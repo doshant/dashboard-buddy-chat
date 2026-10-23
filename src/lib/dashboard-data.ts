@@ -1,230 +1,51 @@
+import { buildLaunchData, nationalLaunchRaw } from "@/lib/launch-data";
+import { regionNames, timePeriods } from "@/lib/scope";
+
+export { assumedGtn, last, pct, sum, wacPerVial } from "@/lib/launch-data";
+
 export const filters = {
-  geographyLevels: ["Nation", "Region", "Territory"],
-  geographyNames: ["Nation", "East", "West", "Central"],
-  timePeriods: ["Launch to Date", "QTD", "Monthly"],
+  geographyLevels: ["Nation", "Region"],
+  regionNames,
+  timePeriods,
 } as const;
 
 export const dataThrough = "Sep 30, 2026";
 
-// Ex-factory economics: net sales = paid vials × WAC less assumed GTN %.
-export const wacPerVial = 180_000;
-export const assumedGtn = 0.15;
-
-export const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
-export const pct = (part: number, whole: number) => Math.round((part / whole) * 100);
-const round1 = (value: number) => Math.round(value * 10) / 10;
-
-export function last<T>(rows: T[], offset = 1): T {
-  const row = rows[rows.length - offset];
-  if (row === undefined) throw new Error("Expected a populated series");
-  return row;
-}
-
-function toNetSalesM(paidVials: number) {
-  return Math.round(((paidVials * wacPerVial * (1 - assumedGtn)) / 1e6) * 100) / 100;
-}
-
-// Ex-factory shipments against the original budget and the latest estimate (LE).
-export const monthlyVials = [
-  { month: "Jan", paid: 6, free: 8, budget: 16, le: 14, forecastNetSales: 1.2 },
-  { month: "Feb", paid: 12, free: 9, budget: 20, le: 21, forecastNetSales: 1.8 },
-  { month: "Mar", paid: 13, free: 7, budget: 22, le: 20, forecastNetSales: 2.3 },
-  { month: "Apr", paid: 13, free: 6, budget: 24, le: 19, forecastNetSales: 2.7 },
-  { month: "May", paid: 17, free: 6, budget: 26, le: 23, forecastNetSales: 3.0 },
-  { month: "Jun", paid: 21, free: 6, budget: 28, le: 27, forecastNetSales: 3.3 },
-  { month: "Jul", paid: 23, free: 5, budget: 30, le: 29, forecastNetSales: 3.6 },
-  { month: "Aug", paid: 26, free: 6, budget: 32, le: 31, forecastNetSales: 3.9 },
-  { month: "Sep", paid: 29, free: 6, budget: 34, le: 33, forecastNetSales: 4.2 },
-].map((row) => ({ ...row, total: row.paid + row.free }));
-
-export const monthlyNetSales = monthlyVials.map((row) => ({
-  month: row.month,
-  actual: toNetSalesM(row.paid),
-  forecast: row.forecastNetSales,
-}));
-
-export const activePatientsTrend = [
-  { month: "Jan", loading: 9, maintenance: 0 },
-  { month: "Feb", loading: 14, maintenance: 3 },
-  { month: "Mar", loading: 11, maintenance: 12 },
-  { month: "Apr", loading: 10, maintenance: 18 },
-  { month: "May", loading: 10, maintenance: 24 },
-  { month: "Jun", loading: 12, maintenance: 29 },
-  { month: "Jul", loading: 11, maintenance: 36 },
-  { month: "Aug", loading: 12, maintenance: 42 },
-  { month: "Sep", loading: 11, maintenance: 51 },
-];
-
-// Commercial is paid drug; Quick Start, Bridge and PAP are free-goods programs.
-export const activeByStatus = [
-  { month: "Jan", commercial: 2, quickStart: 3, bridge: 1, pap: 3 },
-  { month: "Feb", commercial: 6, quickStart: 5, bridge: 2, pap: 4 },
-  { month: "Mar", commercial: 11, quickStart: 5, bridge: 3, pap: 4 },
-  { month: "Apr", commercial: 16, quickStart: 5, bridge: 3, pap: 4 },
-  { month: "May", commercial: 21, quickStart: 6, bridge: 3, pap: 4 },
-  { month: "Jun", commercial: 26, quickStart: 7, bridge: 3, pap: 5 },
-  { month: "Jul", commercial: 31, quickStart: 7, bridge: 4, pap: 5 },
-  { month: "Aug", commercial: 37, quickStart: 7, bridge: 4, pap: 6 },
-  { month: "Sep", commercial: 44, quickStart: 7, bridge: 5, pap: 6 },
-];
-
-export const newPatients = [
-  { month: "Jan", eapTransition: 7, newToBrand: 2 },
-  { month: "Feb", eapTransition: 5, newToBrand: 3 },
-  { month: "Mar", eapTransition: 3, newToBrand: 4 },
-  { month: "Apr", eapTransition: 2, newToBrand: 4 },
-  { month: "May", eapTransition: 1, newToBrand: 6 },
-  { month: "Jun", eapTransition: 1, newToBrand: 7 },
-  { month: "Jul", eapTransition: 0, newToBrand: 7 },
-  { month: "Aug", eapTransition: 0, newToBrand: 8 },
-  { month: "Sep", eapTransition: 0, newToBrand: 9 },
-];
-
-// Cumulative since launch: patients who have ever reached each step.
-export const funnel = {
-  referred: 80,
-  benefitsVerified: 77,
-  paApproved: 73,
-  firstDose: 69,
-  secondDose: 64,
-  maintenance: 54,
-};
-
-export const patientFunnel = [
-  { stage: "Referred", patients: funnel.referred },
-  { stage: "Benefits verified", patients: funnel.benefitsVerified },
-  { stage: "PA approved", patients: funnel.paApproved },
-  { stage: "First dose", patients: funnel.firstDose },
-  { stage: "Second dose", patients: funnel.secondDose },
-  { stage: "Maintenance (3+)", patients: funnel.maintenance },
-];
-
-export const pendingByStep = {
-  benefitsVerification: { d0to14: 2, d15to30: 0, d31plus: 0 },
-  priorAuthorization: { d0to14: 1, d15to30: 1, d31plus: 1 },
-  lpScheduling: { d0to14: 1, d15to30: 1, d31plus: 2 },
-};
-
-const pendingTotal = (row: { d0to14: number; d15to30: number; d31plus: number }) => row.d0to14 + row.d15to30 + row.d31plus;
-
-export const pendingPatients = [
-  { stage: "Benefits verification", ...pendingByStep.benefitsVerification },
-  { stage: "Prior authorization", ...pendingByStep.priorAuthorization },
-  { stage: "LP scheduling", ...pendingByStep.lpScheduling },
-].map((row) => ({ ...row, total: pendingTotal(row) }));
-
-export const pendingAvgDays = 22;
-
-// Referrals that left the funnel before a first dose, by the step where they stopped.
-export const cancelledByStep = {
-  benefitsVerification: funnel.referred - funnel.benefitsVerified - pendingTotal(pendingByStep.benefitsVerification),
-  priorAuthorization: funnel.benefitsVerified - funnel.paApproved - pendingTotal(pendingByStep.priorAuthorization),
-  lpScheduling: funnel.paApproved - funnel.firstDose - pendingTotal(pendingByStep.lpScheduling),
-};
-
-export const prescribers = [
-  { month: "Jan", new: 7, repeat: 0 },
-  { month: "Feb", new: 5, repeat: 5 },
-  { month: "Mar", new: 4, repeat: 8 },
-  { month: "Apr", new: 3, repeat: 10 },
-  { month: "May", new: 4, repeat: 12 },
-  { month: "Jun", new: 4, repeat: 14 },
-  { month: "Jul", new: 3, repeat: 17 },
-  { month: "Aug", new: 2, repeat: 19 },
-  { month: "Sep", new: 6, repeat: 19 },
-];
-
-// Latest month is September; QTD is Q3 (Jul–Sep).
-const q3Vials = monthlyVials.slice(-3);
-const q3NetSales = monthlyNetSales.slice(-3);
-const latestNetSales = last(monthlyNetSales);
-const latestVials = last(monthlyVials);
-
-export const attainment = {
-  netSales: {
-    month: { actual: latestNetSales.actual, target: latestNetSales.forecast },
-    qtd: { actual: round1(sum(q3NetSales.map((row) => row.actual))), target: round1(sum(q3NetSales.map((row) => row.forecast))) },
-    ltd: { actual: round1(sum(monthlyNetSales.map((row) => row.actual))), target: round1(sum(monthlyNetSales.map((row) => row.forecast))) },
-  },
-  vials: {
-    month: { actual: latestVials.total, target: latestVials.budget },
-    qtd: { actual: sum(q3Vials.map((row) => row.total)), target: sum(q3Vials.map((row) => row.budget)) },
-    ltd: { actual: sum(monthlyVials.map((row) => row.total)), target: sum(monthlyVials.map((row) => row.budget)) },
-  },
-};
-
-const latestStatus = last(activeByStatus);
-const latestActive = last(activePatientsTrend);
-const activeTotal = latestActive.loading + latestActive.maintenance;
-const priorActive = last(activePatientsTrend, 2);
-const priorActiveTotal = priorActive.loading + priorActive.maintenance;
-const latestNew = last(newPatients);
-const latestPrescribers = last(prescribers);
-const vialsTotal = sum(monthlyVials.map((row) => row.total));
-const vialsBudget = sum(monthlyVials.map((row) => row.budget));
-const vialsLe = sum(monthlyVials.map((row) => row.le));
-
-export const kpis = {
-  netSales: {
-    ltd: attainment.netSales.ltd.actual,
-    forecast: attainment.netSales.ltd.target,
-    attainmentPct: pct(attainment.netSales.ltd.actual, attainment.netSales.ltd.target),
-    wac: wacPerVial,
-    gtn: assumedGtn,
-  },
-  vials: {
-    paid: sum(monthlyVials.map((row) => row.paid)),
-    free: sum(monthlyVials.map((row) => row.free)),
-    total: vialsTotal,
-    budget: vialsBudget,
-    le: vialsLe,
-    budgetPct: pct(vialsTotal, vialsBudget),
-    lePct: pct(vialsTotal, vialsLe),
-  },
-  activePatients: {
-    total: activeTotal,
-    paid: latestStatus.commercial,
-    free: latestStatus.quickStart + latestStatus.bridge + latestStatus.pap,
-    loading: latestActive.loading,
-    maintenance: latestActive.maintenance,
-    prior: priorActiveTotal,
-    changePct: pct(activeTotal - priorActiveTotal, priorActiveTotal),
-  },
-  newPatients: {
-    total: latestNew.eapTransition + latestNew.newToBrand,
-    eapTransition: latestNew.eapTransition,
-    newToBrand: latestNew.newToBrand,
-    sinceLaunch: sum(newPatients.map((row) => row.eapTransition + row.newToBrand)),
-    eapSinceLaunch: sum(newPatients.map((row) => row.eapTransition)),
-    newToBrandSinceLaunch: sum(newPatients.map((row) => row.newToBrand)),
-  },
-  pending: {
-    total: sum(pendingPatients.map((row) => row.total)),
-    over30: sum(pendingPatients.map((row) => row.d31plus)),
-    avgDays: pendingAvgDays,
-  },
-  prescribers: {
-    new: latestPrescribers.new,
-    ordering: latestPrescribers.new + latestPrescribers.repeat,
-    sinceLaunch: sum(prescribers.map((row) => row.new)),
-  },
-};
+// National launch figures. The assistant and the national dashboard view both read these;
+// regional and period views are built from the same rules in scoped-data.
+export const {
+  monthlyVials,
+  monthlyNetSales,
+  activePatientsTrend,
+  activeByStatus,
+  newPatients,
+  funnel,
+  patientFunnel,
+  pendingByStep,
+  pendingPatients,
+  pendingAvgDays,
+  cancelledByStep,
+  prescribers,
+  attainment,
+  kpis,
+} = buildLaunchData(nationalLaunchRaw);
 
 export const panelLabels = [
+  "Executive Summary",
   "Overview",
   "Market Access",
   "Marketing",
-  "Site of Care",
   "Field Activity",
 ] as const;
 
 export type PanelLabel = (typeof panelLabels)[number];
 
 // Demo profiles simulating role-based access: each sees only its permitted tabs.
+// Every profile gets the Executive Summary alongside its own tabs.
 export const profiles: { id: string; name: string; role: string; avatar: string; panels: readonly PanelLabel[] }[] = [
   { id: "jenny", name: "Jenny", role: "Brand Director", avatar: "👩🏻‍💼", panels: panelLabels },
-  { id: "bob", name: "Bob", role: "Market Access Lead", avatar: "👨🏽‍💼", panels: ["Market Access"] },
-  { id: "jeff", name: "Jeff", role: "Marketing Manager", avatar: "🧑🏼‍💼", panels: ["Marketing"] },
+  { id: "bob", name: "Bob", role: "Market Access Lead", avatar: "👨🏽‍💼", panels: ["Executive Summary", "Market Access"] },
+  { id: "jeff", name: "Jeff", role: "Marketing Manager", avatar: "🧑🏼‍💼", panels: ["Executive Summary", "Marketing"] },
 ];
 
 export function accessSummary(panels: readonly PanelLabel[]) {
@@ -235,6 +56,13 @@ export function accessSummary(panels: readonly PanelLabel[]) {
 type DashboardAnswer = { title: string; response: string; suggestions: string[] };
 
 const starterQuestionsByPanel: Partial<Record<PanelLabel, string[]>> = {
+  "Executive Summary": [
+    "Summarize the key insights from this dashboard.",
+    "What is our fill rate?",
+    "What is our abandonment rate?",
+    "How are we tracking against forecast?",
+    "How many patients are active right now?",
+  ],
   Overview: [
     "How are we tracking against forecast?",
     "How many patients are active right now?",
@@ -256,7 +84,55 @@ const starterQuestionsByPanel: Partial<Record<PanelLabel, string[]>> = {
     "How are our emails performing?",
     "Which region is performing best?",
   ],
+  "Field Activity": [
+    "How many target HCPs have we reached?",
+    "How many calls has the field team made?",
+    "What is our call type mix?",
+    "How are HCPs moving through the engagement funnel?",
+    "Which region has the best HCP reach?",
+  ],
 };
+
+export type QuestionKind = "Descriptive" | "Predictive" | "Prescriptive";
+
+// Forward-looking questions: what is likely to happen (predictive) and what to do about it
+// (prescriptive). They aren't offered up front; they follow the descriptive answers they build on.
+const forwardQuestions = {
+  salesOutlook: { kind: "Predictive", question: "What will net sales be by year end?" },
+  salesActions: { kind: "Prescriptive", question: "What should we do to close the sales gap?" },
+  salesMilestone: { kind: "Predictive", question: "When will monthly net sales pass $5M?" },
+  activeOutlook: { kind: "Predictive", question: "How many patients will be active by December?" },
+  freeToPaidActions: { kind: "Prescriptive", question: "How can we move free-goods patients to paid?" },
+  over30Actions: { kind: "Prescriptive", question: "What should we do about patients waiting over 30 days?" },
+  supplyOutlook: { kind: "Predictive", question: "How many vials will we need next quarter?" },
+  timeToDoseActions: { kind: "Prescriptive", question: "How can we speed up time to first dose?" },
+  inventoryRisk: { kind: "Predictive", question: "Will channel inventory run short?" },
+  timeOutlook: { kind: "Predictive", question: "How fast will time to first dose improve?" },
+  stopActions: { kind: "Prescriptive", question: "How can we reduce discontinuations?" },
+  trafficOutlook: { kind: "Predictive", question: "What will website traffic be next quarter?" },
+  marketingActions: { kind: "Prescriptive", question: "Where should we focus marketing next?" },
+  mediaOutlook: { kind: "Predictive", question: "How many impressions will we deliver next quarter?" },
+  hvaActions: { kind: "Prescriptive", question: "How do we turn website visits into rep requests?" },
+  reachOutlook: { kind: "Predictive", question: "How many HCPs will we reach by year end?" },
+  fieldActions: { kind: "Prescriptive", question: "Which HCPs should the field team prioritize?" },
+  prescriberOutlook: { kind: "Predictive", question: "How many new prescribers can we expect next quarter?" },
+  repeatActions: { kind: "Prescriptive", question: "How do we turn one-time prescribers into repeat prescribers?" },
+} as const satisfies Record<string, { kind: QuestionKind; question: string }>;
+
+type ForwardTopic = keyof typeof forwardQuestions;
+
+export const forwardQuestionList = Object.values(forwardQuestions).map((item) => item.question);
+
+export function forwardQuestion(key: ForwardTopic) {
+  return forwardQuestions[key].question;
+}
+
+export function questionKind(question: string): QuestionKind {
+  return (
+    Object.values(forwardQuestions).find((item) => item.question === question)?.kind ??
+    "Descriptive"
+  );
+}
 
 export function starterQuestionsFor(panel: string) {
   return starterQuestionsByPanel[panel as PanelLabel] ?? starterQuestionsByPanel.Overview ?? [];
@@ -315,12 +191,12 @@ export const dashboardAnswers = {
       "",
       "| Stage | Patients |",
       "| --- | ---: |",
-      "| LP scheduling | 4 |",
+      "| Procedure scheduling | 4 |",
       "| Prior authorization | 3 |",
       "| Benefits verification | 2 |",
       "| **Total pending** | **9** |",
       "",
-      "3 patients have waited over 30 days, 2 of them at LP scheduling.",
+      "3 patients have waited over 30 days, 2 of them at procedure scheduling.",
     ),
     suggestions: [
       "How many patients are active right now?",
@@ -355,7 +231,7 @@ export const dashboardAnswers = {
       "| Net sales | $24.5M, 94% of forecast (Q3 at 102%) |",
       "| Active patients | 62 (44 paid, 18 free) |",
       "| New starts, September | 9, all new to brand |",
-      "| Pending patients | 9, mostly at LP scheduling |",
+      "| Pending patients | 9, mostly at procedure scheduling |",
       "| Prescribers | 38 HCPs since launch |",
     ),
     suggestions: [
@@ -391,7 +267,7 @@ export const dashboardAnswers = {
   timeToDose: {
     title: "Time to first dose",
     response: lines(
-      "**Non-EAP patients reach their first intrathecal dose a median of 29 days after referral** (mean 34, across 50 new-to-brand starts).",
+      "**Non-EAP patients reach their first dose a median of 29 days after referral** (mean 34, across 50 new-to-brand starts).",
       "",
       "| Referral month | Days to first dose |",
       "| --- | ---: |",
@@ -577,6 +453,528 @@ export const dashboardAnswers = {
       "What is our ad engagement rate?",
     ],
   },
+  fieldReach: {
+    title: "HCP reach",
+    response: lines(
+      "**126 of 150 targeted HCPs have been reached (84%)**, up from 34% in M1 as the call plan grew from 120 to 150 HCPs.",
+      "",
+      "| Month | Targeted | Reached | Reach % |",
+      "| --- | ---: | ---: | ---: |",
+      "| M1 | 120 | 41 | 34% |",
+      "| M2 | 126 | 62 | 49% |",
+      "| M3 | 132 | 78 | 59% |",
+      "| M4 | 138 | 91 | 66% |",
+      "| M5 | 142 | 101 | 71% |",
+      "| M6 | 146 | 110 | 75% |",
+      "| M7 | 148 | 117 | 79% |",
+      "| M8 | 150 | 122 | 81% |",
+      "| M9 | 150 | 126 | 84% |",
+    ),
+    suggestions: [
+      "Which region has the best HCP reach?",
+      "How many calls has the field team made?",
+      "How are HCPs moving through the engagement funnel?",
+    ],
+  },
+  fieldCalls: {
+    title: "Field calls",
+    response: lines(
+      "**The field team has made 872 calls since launch**, rising from 64 in M1 to 128 in M9.",
+      "",
+      "| Metric | Value |",
+      "| --- | ---: |",
+      "| Total calls | 872 |",
+      "| Avg calls per reached HCP | 6.9 |",
+      "| Avg calls per selling day | 4.5 |",
+      "| Calls per selling day, M9 | 5.8 |",
+      "",
+      "| Month | Calls | Per day |",
+      "| --- | ---: | ---: |",
+      "| M1 | 64 | 2.9 |",
+      "| M2 | 73 | 3.7 |",
+      "| M3 | 82 | 3.7 |",
+      "| M4 | 90 | 4.1 |",
+      "| M5 | 97 | 4.6 |",
+      "| M6 | 105 | 4.8 |",
+      "| M7 | 113 | 4.9 |",
+      "| M8 | 120 | 5.7 |",
+      "| M9 | 128 | 5.8 |",
+    ),
+    suggestions: [
+      "What is our call type mix?",
+      "How many target HCPs have we reached?",
+      "Which region has the best HCP reach?",
+    ],
+  },
+  fieldCallMix: {
+    title: "Call type mix",
+    response: lines(
+      "**59% of calls are face-to-face**, and the split has held between 58% and 60% every month.",
+      "",
+      "| Call type | Calls | Share |",
+      "| --- | ---: | ---: |",
+      "| Face-to-face | 514 | 59% |",
+      "| Virtual | 223 | 26% |",
+      "| Phone | 135 | 15% |",
+      "| **Total** | **872** | **100%** |",
+    ),
+    suggestions: [
+      "How many calls has the field team made?",
+      "How many target HCPs have we reached?",
+      "How are HCPs moving through the engagement funnel?",
+    ],
+  },
+  fieldFunnel: {
+    title: "HCP engagement funnel",
+    response: lines(
+      "**38 of 150 targeted HCPs have prescribed (25%)**, and 9 are champions with 3+ patients started.",
+      "",
+      "| Stage | HCPs | % of targeted |",
+      "| --- | ---: | ---: |",
+      "| Targeted | 150 | 100% |",
+      "| Reached | 126 | 84% |",
+      "| Prescribers | 38 | 25% |",
+      "| Repeat prescribers | 24 | 16% |",
+      "| Champions | 9 | 6% |",
+      "",
+      "25 of the 38 prescribers ordered in September.",
+    ),
+    suggestions: [
+      "How many target HCPs have we reached?",
+      "Which region has the best HCP reach?",
+      "How many calls has the field team made?",
+    ],
+  },
+  fieldRegional: {
+    title: "Field reach by region",
+    response: lines(
+      "**Northeast has the best HCP reach at 86.4%**, just ahead of West (85.7%). Midwest trails at 80%.",
+      "",
+      "| Region | Targeted | Reached | Reach % | Calls | Prescribers |",
+      "| --- | ---: | ---: | ---: | ---: | ---: |",
+      "| Northeast | 44 | 38 | 86% | 262 | 12 |",
+      "| West | 42 | 36 | 86% | 248 | 11 |",
+      "| Southeast | 34 | 28 | 82% | 196 | 8 |",
+      "| Midwest | 30 | 24 | 80% | 166 | 7 |",
+      "| **Total** | **150** | **126** | **84%** | **872** | **38** |",
+    ),
+    suggestions: [
+      "How many target HCPs have we reached?",
+      "How are HCPs moving through the engagement funnel?",
+      "What is our call type mix?",
+    ],
+  },
+  fillRate: {
+    title: "Fill rate",
+    response: lines(
+      "**86% of referrals have filled (reached a first dose)**, just above the 85% target. 97% of referrals with a known outcome have started.",
+      "",
+      "| Measure | Patients | Rate |",
+      "| --- | ---: | ---: |",
+      "| Referrals | 80 | |",
+      "| Filled (first dose) | 69 | 86% |",
+      "| Known outcome (excl. pending) | 71 | |",
+      "| Filled, of known outcomes | 69 | 97% |",
+      "| Still pending | 9 | 11% |",
+      "",
+      "PA approval runs at 95%, and the median time from referral to first dose is 29 days.",
+    ),
+    suggestions: [
+      "What is our abandonment rate?",
+      "Why are patients still pending?",
+      "Summarize the key insights from this dashboard.",
+    ],
+  },
+  abandonment: {
+    title: "Abandonment rate",
+    response: lines(
+      "**2.5% of referrals were abandoned before a first dose** (2 of 80), within the 5% target.",
+      "",
+      "| Measure | Patients | Rate |",
+      "| --- | ---: | ---: |",
+      "| Cancelled before first dose | 2 | 2.5% of referrals |",
+      "| Pending over 30 days (at risk) | 3 | 3.8% of referrals |",
+      "| Discontinued after dosing | 9 | 13% of starts |",
+      "| Restarted | 2 | |",
+      "| Off therapy | 7 | |",
+      "",
+      "The two cancellations were 1 death and 1 access denial.",
+    ),
+    suggestions: [
+      "What is our fill rate?",
+      "Why are patients stopping therapy?",
+      "Summarize the key insights from this dashboard.",
+    ],
+  },
+  salesOutlook: {
+    title: "Net sales outlook",
+    response: lines(
+      "**Net sales are projected at $15.8M in Q4, taking launch-to-date sales to about $40.3M by year end.** That is 33% above Q3's $11.9M, if paid vials keep growing by about 2.7 a month.",
+      "",
+      "| Month | Paid vials | Net sales |",
+      "| --- | ---: | ---: |",
+      "| Oct | 31.7 | $4.85M |",
+      "| Nov | 34.3 | $5.25M |",
+      "| Dec | 37.0 | $5.66M |",
+      "| **Q4** | **103** | **$15.8M** |",
+      "",
+      "Method: straight-line trend of the last three months (Jun → Sep), at $153k net per paid vial. A demo estimate, not a forecast.",
+    ),
+    suggestions: [
+      "What should we do to close the sales gap?",
+      "How are we tracking against forecast?",
+      "What is our fill rate?",
+    ],
+  },
+  salesActions: {
+    title: "Actions to close the sales gap",
+    response: lines(
+      "**Moving the 12 patients on Quick Start and Bridge to commercial coverage would close the $1.5M launch-to-date gap in about 1.6 months.** Together, the three actions below add about $1.61M a month.",
+      "",
+      "| Action | Patients | Net sales / month |",
+      "| --- | ---: | ---: |",
+      "| Move Quick Start and Bridge patients to commercial coverage | 12 | $0.92M |",
+      "| Clear the procedure scheduling backlog | 4 | $0.31M |",
+      "| Resolve pending benefits checks and PAs | 5 | $0.38M |",
+      "| **Total** | **21** | **$1.61M** |",
+      "",
+      "Sized at 0.5 doses per patient a month (September doses ÷ active patients) and $153k net per paid vial, assuming commercial coverage.",
+    ),
+    suggestions: [
+      "What will net sales be by year end?",
+      "Why are patients still pending?",
+      "What is our abandonment rate?",
+    ],
+  },
+  supplyOutlook: {
+    title: "Vial supply outlook",
+    response: lines(
+      "**About 122 vials need to ship in Q4**: 107 projected doses plus one month of cover for December, less the 23 on hand. That is 28% more than the 95 shipped in Q3.",
+      "",
+      "| Month | Projected doses |",
+      "| --- | ---: |",
+      "| Oct | 33 |",
+      "| Nov | 36 |",
+      "| Dec | 38 |",
+      "| **Q4 doses** | **107** |",
+      "| + December cover | 38 |",
+      "| − On hand today | 23 |",
+      "| **Shipments needed** | **122** |",
+      "",
+      "Method: straight-line trend of the last three months (Jun → Sep). A demo estimate, not a forecast.",
+    ),
+    suggestions: [
+      "How can we speed up time to first dose?",
+      "How much inventory is in the channel?",
+      "What does the payer mix look like?",
+    ],
+  },
+  timeToDoseActions: {
+    title: "Actions to speed up first dose",
+    response: lines(
+      "**Procedure scheduling is the biggest lever**: it takes 12 of the 23 days from referral to first dose (52%) for August referrals, and holds 4 of the 9 pending patients, 2 of them waiting over 30 days.",
+      "",
+      "| Step | Median days (Aug) | Pending | Over 30 days | Action |",
+      "| --- | ---: | ---: | ---: | --- |",
+      "| Referral → PA approval | 11 | 5 | 1 | Escalate the PA over 30 days; keep benefits checks under 14 days |",
+      "| PA approval → first dose | 12 | 4 | 2 | Add site scheduling support and book the procedure at PA approval |",
+      "",
+      "At the recent pace (1.7 days faster each month), the median would reach about 20 days for October referrals.",
+    ),
+    suggestions: [
+      "How many vials will we need next quarter?",
+      "What is our PA approval rate?",
+      "How long does it take to get to first dose?",
+    ],
+  },
+  trafficOutlook: {
+    title: "Website traffic outlook",
+    response: lines(
+      "**Website visits are projected at 66.7k in Q4**, 18% above Q3's 56.6k, if monthly visits keep growing by about 1.1k.",
+      "",
+      "| Month | Projected visits |",
+      "| --- | ---: |",
+      "| Oct | 21.2k |",
+      "| Nov | 22.2k |",
+      "| Dec | 23.3k |",
+      "| **Q4** | **66.7k** |",
+      "",
+      "At today's 4.7% HVA rate, that is about 3.1k high value actions.",
+      "",
+      "Method: straight-line trend of the last three months (Jun → Sep). A demo estimate, not a forecast.",
+    ),
+    suggestions: [
+      "Where should we focus marketing next?",
+      "How is website traffic trending?",
+      "How are our emails performing?",
+    ],
+  },
+  marketingActions: {
+    title: "Marketing priorities",
+    response: lines(
+      "**Lift HCP email engagement first**: HCP emails open at 26.0% against 36.0% for patients, and convert a third as often (0.5% vs 1.5%).",
+      "",
+      "| Priority | Evidence | Expected effect |",
+      "| --- | --- | --- |",
+      "| Test HCP subject lines and send times | HCP open rate 26.0% vs patient 36.0% | Each +1 pt ≈ 467 more HCP opens |",
+      "| Shift email volume toward patient campaigns | Patient emails convert 1.5% vs HCP 0.5% | More HVAs per email sent |",
+      "| Close the Midwest gap | HVA rate 4.6% and open rate 28.2%, lowest of the four regions | Bring to national 4.7% and 29.1% |",
+    ),
+    suggestions: [
+      "What will website traffic be next quarter?",
+      "How are our emails performing?",
+      "Which region is performing best?",
+    ],
+  },
+  reachOutlook: {
+    title: "HCP reach outlook",
+    response: lines(
+      "**Field reach is projected at 142 of 150 targeted HCPs (95%) by December**, if the team keeps adding about 5 HCPs a month.",
+      "",
+      "| Month | HCPs reached | Calls |",
+      "| --- | ---: | ---: |",
+      "| Oct | 131 | 136 |",
+      "| Nov | 137 | 143 |",
+      "| Dec | 142 | 151 |",
+      "",
+      "That is 430 calls in Q4, up from 361 in Q3.",
+      "",
+      "Method: straight-line trend of the last three months (Jun → Sep). A demo estimate, not a forecast.",
+    ),
+    suggestions: [
+      "Which HCPs should the field team prioritize?",
+      "How many target HCPs have we reached?",
+      "How many calls has the field team made?",
+    ],
+  },
+  fieldActions: {
+    title: "Field priorities",
+    response: lines(
+      "**Start with the 24 targeted HCPs not yet reached, 6 in each region, beginning with Midwest (80% reach) and Southeast (82%).** Then work the 88 reached HCPs who have not prescribed: 30% of reached HCPs prescribe today.",
+      "",
+      "| Region | Not yet reached | Reach % | Reached → prescriber |",
+      "| --- | ---: | ---: | ---: |",
+      "| Midwest | 6 | 80% | 29% |",
+      "| Southeast | 6 | 82% | 29% |",
+      "| West | 6 | 86% | 31% |",
+      "| Northeast | 6 | 86% | 32% |",
+    ),
+    suggestions: [
+      "How many HCPs will we reach by year end?",
+      "Which region has the best HCP reach?",
+      "How are HCPs moving through the engagement funnel?",
+    ],
+  },
+  salesMilestone: {
+    title: "Net sales milestone",
+    response: lines(
+      "**Monthly net sales are projected to pass $5M in November**, up from $4.44M in September.",
+      "",
+      "| Month | Projected net sales |",
+      "| --- | ---: |",
+      "| Oct | $4.85M |",
+      "| Nov | $5.25M |",
+      "| Dec | $5.66M |",
+      "",
+      "Method: straight-line trend of the last three months (Jun → Sep). A demo estimate, not a forecast.",
+    ),
+    suggestions: [
+      "What will net sales be by year end?",
+      "How can we move free-goods patients to paid?",
+      "How are we tracking against forecast?",
+    ],
+  },
+  activeOutlook: {
+    title: "Active patient outlook",
+    response: lines(
+      "**About 83 patients are projected to be active by December**, up from 62 today, if the base keeps growing by about 7 a month.",
+      "",
+      "| Month | Active patients |",
+      "| --- | ---: |",
+      "| Sep (actual) | 62 |",
+      "| Oct | 69 |",
+      "| Nov | 76 |",
+      "| Dec | 83 |",
+      "",
+      "Method: straight-line trend of the last three months (Jun → Sep). A demo estimate, not a forecast.",
+    ),
+    suggestions: [
+      "How can we move free-goods patients to paid?",
+      "What will net sales be by year end?",
+      "How many patients are active right now?",
+    ],
+  },
+  freeToPaidActions: {
+    title: "Free goods to paid",
+    response: lines(
+      "**18 active patients (29%) are on free goods.** Moving the 12 on Quick Start and Bridge to commercial coverage is worth about $0.92M a month. PAP patients usually stay free, so re-screen them for public coverage.",
+      "",
+      "| Program | Patients | Action | Net sales / month if paid |",
+      "| --- | ---: | --- | ---: |",
+      "| Quick Start | 7 | Complete benefits checks and move to commercial | $0.54M |",
+      "| Bridge | 5 | Resolve the coverage gap or appeal | $0.38M |",
+      "| PAP | 6 | Re-screen for Medicare or Medicaid eligibility | $0.46M |",
+      "",
+      "Sized at 0.5 doses per patient a month and $153k net per paid vial.",
+    ),
+    suggestions: [
+      "What should we do to close the sales gap?",
+      "How many patients will be active by December?",
+      "What does the payer mix look like?",
+    ],
+  },
+  over30Actions: {
+    title: "Patients waiting over 30 days",
+    response: lines(
+      "**3 patients have waited more than 30 days: 2 at procedure scheduling and 1 at prior authorization.** If all three were lost, abandonment would rise from 2.5% to 6.3%, above the 5% target.",
+      "",
+      "| Stage | Over 30 days | Action |",
+      "| --- | ---: | --- |",
+      "| Prior authorization | 1 | Escalate to peer-to-peer review or appeal |",
+      "| Procedure scheduling | 2 | Book at an alternate site or add scheduling support |",
+      "",
+      "Starting all three is worth about $0.23M in net sales a month.",
+    ),
+    suggestions: [
+      "How can we speed up time to first dose?",
+      "What is our abandonment rate?",
+      "Why are patients still pending?",
+    ],
+  },
+  inventoryRisk: {
+    title: "Inventory risk",
+    response: lines(
+      "**Yes, without new shipments: the 23 vials on hand cover about 21 days of October's projected 33 doses.** Ship about 46 vials in October to cover the month and start November with a month of cover.",
+      "",
+      "| Measure | Vials |",
+      "| --- | ---: |",
+      "| On hand today | 23 |",
+      "| Projected October doses | 33 |",
+      "| Projected November doses | 36 |",
+      "| **October shipment needed** | **46** |",
+      "",
+      "Method: straight-line trend of the last three months (Jun → Sep). A demo estimate, not a forecast.",
+    ),
+    suggestions: [
+      "How many vials will we need next quarter?",
+      "How much inventory is in the channel?",
+      "How can we speed up time to first dose?",
+    ],
+  },
+  timeOutlook: {
+    title: "Time to first dose outlook",
+    response: lines(
+      "**The median time from referral to first dose is projected to fall from 23 days (August referrals) to about 16 days for December referrals**, if the recent pace holds.",
+      "",
+      "| Referral month | Days to first dose | Days to PA approval |",
+      "| --- | ---: | ---: |",
+      "| Aug (actual) | 23 | 11 |",
+      "| Sep | 21 | 10 |",
+      "| Oct | 20 | 9 |",
+      "| Nov | 18 | 8 |",
+      "| Dec | 16 | 7 |",
+      "",
+      "Gains this fast rarely continue for long; procedure scheduling capacity will set a floor.",
+      "",
+      "Method: straight-line trend of the last three months (Jun → Sep). A demo estimate, not a forecast.",
+    ),
+    suggestions: [
+      "How can we speed up time to first dose?",
+      "How long does it take to get to first dose?",
+      "What is our PA approval rate?",
+    ],
+  },
+  stopActions: {
+    title: "Reducing discontinuations",
+    response: lines(
+      "**8 of the 11 patients who stopped or never started did so because of disease progression (death, ventilation or hospice).** The 3 access denials are the part we can act on directly, and 2 of those patients have already restarted.",
+      "",
+      "| Reason | Before first dose | After dosing | Lever |",
+      "| --- | ---: | ---: | --- |",
+      "| Death | 1 | 3 | Earlier diagnosis and faster starts |",
+      "| Ventilation | 0 | 2 | Earlier diagnosis and faster starts |",
+      "| Hospice | 0 | 2 | Earlier diagnosis and faster starts |",
+      "| Access denial | 1 | 2 | Appeals support and payer escalation |",
+    ),
+    suggestions: [
+      "How fast will time to first dose improve?",
+      "Why are patients stopping therapy?",
+      "How can we speed up time to first dose?",
+    ],
+  },
+  mediaOutlook: {
+    title: "Media outlook",
+    response: lines(
+      "**Paid media is projected to deliver about 7.8M impressions in Q4**, 15% more than Q3's 6.8M, with engagement rising to about 8.5% by December.",
+      "",
+      "| Month | Impressions | Engagement rate |",
+      "| --- | ---: | ---: |",
+      "| Oct | 2.5M | 8.1% |",
+      "| Nov | 2.6M | 8.3% |",
+      "| Dec | 2.7M | 8.5% |",
+      "",
+      "Method: straight-line trend of the last three months (Jun → Sep). A demo estimate, not a forecast.",
+    ),
+    suggestions: [
+      "Where should we focus marketing next?",
+      "Which media channels drive the most impressions?",
+      "What is our ad engagement rate?",
+    ],
+  },
+  hvaActions: {
+    title: "Website to rep requests",
+    response: lines(
+      "**Only 410 of 6.8k high value actions (6%) are rep requests**, about 8.1 for every 1,000 HCP site visits. Most HCP visitors download a resource and leave.",
+      "",
+      "| Action | Evidence | Expected effect |",
+      "| --- | --- | --- |",
+      "| Add a request-a-rep prompt to resource downloads | 6.2k downloads vs 410 rep requests | More downloads become rep conversations |",
+      "| Route rep requests to the field team within a day | 410 requests since launch | Faster first calls with interested HCPs |",
+      "| Retarget HCP site visitors who downloaded | 50.8k HCP site visits | More return visits from engaged HCPs |",
+    ),
+    suggestions: [
+      "What will website traffic be next quarter?",
+      "Where should we focus marketing next?",
+      "How is website traffic trending?",
+    ],
+  },
+  prescriberOutlook: {
+    title: "New prescriber outlook",
+    response: lines(
+      "**About 11 new prescribers are expected in Q4, taking the total to about 49 by December**, based on the last three months' average of 3.7 a month.",
+      "",
+      "| Month | New prescribers |",
+      "| --- | ---: |",
+      "| Jul | 3 |",
+      "| Aug | 2 |",
+      "| Sep | 6 |",
+      "| **Q4 projected** | **11** |",
+      "",
+      "Method: average of the last three months, because new prescribers vary month to month. A demo estimate, not a forecast.",
+    ),
+    suggestions: [
+      "How do we turn one-time prescribers into repeat prescribers?",
+      "How many HCPs will we reach by year end?",
+      "How are HCPs moving through the engagement funnel?",
+    ],
+  },
+  repeatActions: {
+    title: "Growing repeat prescribers",
+    response: lines(
+      "**14 of the 38 prescribers have prescribed only once.** Helping them find a second eligible patient is the biggest lever, and the 9 champions with 3+ patients can share their experience with peers.",
+      "",
+      "| Segment | HCPs | Action |",
+      "| --- | ---: | --- |",
+      "| One-time prescribers | 14 | Follow-up visit to identify a second eligible patient |",
+      "| Repeat prescribers (2 patients) | 15 | Share patient support and scheduling resources |",
+      "| Champions (3+ patients) | 9 | Peer-to-peer programs and referral networks |",
+    ),
+    suggestions: [
+      "How many new prescribers can we expect next quarter?",
+      "Which HCPs should the field team prioritize?",
+      "How many new prescribers did we add?",
+    ],
+  },
   unrecognized: {
     title: "Dashboard Assistant",
     response: "I'm still learning! Please try one of the suggested questions.",
@@ -590,29 +988,90 @@ export const dashboardAnswers = {
 
 type Topic = keyof typeof dashboardAnswers;
 
-// The tab whose data each answer draws on; the assistant only answers from permitted tabs.
-const topicPanels: Record<Topic, PanelLabel | null> = {
-  forecast: "Overview",
-  active: "Overview",
-  pending: "Overview",
-  prescribers: "Overview",
-  summary: "Overview",
-  priorAuth: "Market Access",
-  timeToDose: "Market Access",
-  payerMix: "Market Access",
-  stops: "Market Access",
-  inventory: "Market Access",
-  mediaChannels: "Marketing",
-  adEngagement: "Marketing",
-  websiteTraffic: "Marketing",
-  emailPerformance: "Marketing",
-  regionalMarketing: "Marketing",
+// The tabs whose data each answer draws on; the assistant answers when any of them is permitted.
+// Questions about figures shown on the Executive Summary are open to everyone who has that tab.
+const topicPanels: Record<Topic, readonly PanelLabel[] | null> = {
+  forecast: ["Overview", "Executive Summary"],
+  fillRate: ["Executive Summary"],
+  abandonment: ["Executive Summary"],
+  active: ["Overview", "Executive Summary"],
+  pending: ["Overview", "Executive Summary"],
+  prescribers: ["Overview", "Executive Summary"],
+  summary: ["Overview", "Executive Summary"],
+  priorAuth: ["Market Access"],
+  timeToDose: ["Market Access"],
+  payerMix: ["Market Access"],
+  stops: ["Market Access"],
+  inventory: ["Market Access"],
+  mediaChannels: ["Marketing"],
+  adEngagement: ["Marketing"],
+  websiteTraffic: ["Marketing"],
+  emailPerformance: ["Marketing"],
+  regionalMarketing: ["Marketing"],
+  fieldReach: ["Field Activity"],
+  fieldCalls: ["Field Activity"],
+  fieldCallMix: ["Field Activity"],
+  fieldFunnel: ["Field Activity"],
+  fieldRegional: ["Field Activity"],
+  salesOutlook: ["Executive Summary", "Overview"],
+  salesActions: ["Executive Summary", "Overview"],
+  supplyOutlook: ["Market Access"],
+  timeToDoseActions: ["Market Access"],
+  trafficOutlook: ["Marketing"],
+  marketingActions: ["Marketing"],
+  reachOutlook: ["Field Activity"],
+  fieldActions: ["Field Activity"],
+  salesMilestone: ["Executive Summary", "Overview"],
+  activeOutlook: ["Executive Summary", "Overview"],
+  freeToPaidActions: ["Executive Summary", "Overview"],
+  over30Actions: ["Executive Summary", "Overview"],
+  inventoryRisk: ["Market Access"],
+  timeOutlook: ["Market Access"],
+  stopActions: ["Market Access"],
+  mediaOutlook: ["Marketing"],
+  hvaActions: ["Marketing"],
+  prescriberOutlook: ["Field Activity"],
+  repeatActions: ["Field Activity"],
   unrecognized: null,
 };
 
 function topicFor(question: string): Topic {
   const normalized = question.toLowerCase().trim();
 
+  // Prescriptive ("should", "how can we") and predictive ("will", "next quarter") questions
+  // come first, so their subject words don't route them to a descriptive answer.
+  if (/\bshould\b|recommend|how can we|how do we|what can we|focus|speed up|close the/.test(normalized)) {
+    if (/free.goods|to paid/.test(normalized)) return "freeToPaidActions";
+    if (/over 30|waiting/.test(normalized)) return "over30Actions";
+    if (/discontinu|stopping/.test(normalized)) return "stopActions";
+    if (/rep request/.test(normalized)) return "hvaActions";
+    if (/one-time|repeat prescriber/.test(normalized)) return "repeatActions";
+    if (/sales|gap|revenue|forecast/.test(normalized)) return "salesActions";
+    if (/first dose|time to|speed up|\bpa\b|access/.test(normalized)) return "timeToDoseActions";
+    if (/marketing|email|website|campaign/.test(normalized)) return "marketingActions";
+    if (/hcp|field|\brep|call|prioriti/.test(normalized)) return "fieldActions";
+  }
+  if (/\bwill\b|next quarter|year end|predict|project|expect/.test(normalized)) {
+    if (/pass|milestone|\$5m/.test(normalized)) return "salesMilestone";
+    if (/run short|run out/.test(normalized)) return "inventoryRisk";
+    if (/first dose|time to/.test(normalized)) return "timeOutlook";
+    if (/active/.test(normalized)) return "activeOutlook";
+    if (/impression|media/.test(normalized)) return "mediaOutlook";
+    if (/prescriber/.test(normalized)) return "prescriberOutlook";
+    if (/vial|inventory|supply|ship/.test(normalized)) return "supplyOutlook";
+    if (/website|traffic|visit/.test(normalized)) return "trafficOutlook";
+    if (/reach|hcp/.test(normalized)) return "reachOutlook";
+    if (/sales|revenue/.test(normalized)) return "salesOutlook";
+  }
+  // Executive Summary measures.
+  if (/fill rate|\bfilled\b/.test(normalized)) return "fillRate";
+  if (/abandon/.test(normalized)) return "abandonment";
+  // Field questions first: "region", "engagement" and "HCP" also appear in other topics.
+  if (/region/.test(normalized) && /hcp|reach|call|field/.test(normalized)) return "fieldRegional";
+  if (/engagement funnel|champion|repeat prescriber/.test(normalized)) return "fieldFunnel";
+  if (/call (type|mix)|face-to-face|face to face|virtual|phone/.test(normalized)) return "fieldCallMix";
+  if (/\bcalls?\b|field|selling day/.test(normalized)) return "fieldCalls";
+  if (/\breach|targeted|target hcp/.test(normalized)) return "fieldReach";
   if (/impression|media/.test(normalized)) return "mediaChannels";
   if (/engagement|ad click|video view/.test(normalized)) return "adEngagement";
   if (/website|traffic|visit|\bhva\b|high value/.test(normalized)) return "websiteTraffic";
@@ -632,9 +1091,39 @@ function topicFor(question: string): Topic {
   return "unrecognized";
 }
 
-function canAsk(question: string, allowedPanels: readonly PanelLabel[]) {
-  const panel = topicPanels[topicFor(question)];
-  return panel === null || allowedPanels.includes(panel);
+// After a descriptive answer, offer the predictive and prescriptive questions that build on it.
+const forwardFollowUps: Partial<Record<Topic, ForwardTopic[]>> = {
+  summary: ["salesOutlook", "salesActions"],
+  forecast: ["salesOutlook", "salesMilestone", "salesActions"],
+  active: ["activeOutlook", "freeToPaidActions"],
+  pending: ["over30Actions", "timeOutlook", "timeToDoseActions"],
+  prescribers: ["prescriberOutlook", "repeatActions", "salesActions"],
+  fillRate: ["timeOutlook", "timeToDoseActions", "salesActions"],
+  abandonment: ["over30Actions", "timeOutlook", "stopActions"],
+  priorAuth: ["timeOutlook", "timeToDoseActions"],
+  timeToDose: ["timeOutlook", "timeToDoseActions"],
+  payerMix: ["supplyOutlook", "freeToPaidActions"],
+  stops: ["timeOutlook", "stopActions"],
+  inventory: ["inventoryRisk", "timeToDoseActions"],
+  mediaChannels: ["mediaOutlook", "marketingActions"],
+  adEngagement: ["mediaOutlook", "marketingActions"],
+  websiteTraffic: ["trafficOutlook", "hvaActions"],
+  emailPerformance: ["trafficOutlook", "marketingActions"],
+  regionalMarketing: ["trafficOutlook", "marketingActions"],
+  fieldReach: ["reachOutlook", "fieldActions"],
+  fieldCalls: ["reachOutlook", "fieldActions"],
+  fieldCallMix: ["reachOutlook", "fieldActions"],
+  fieldFunnel: ["prescriberOutlook", "repeatActions"],
+  fieldRegional: ["reachOutlook", "fieldActions"],
+};
+
+function canAnswer(topic: Topic, allowedPanels: readonly PanelLabel[]) {
+  const panels = topicPanels[topic];
+  return panels === null || panels.some((panel) => allowedPanels.includes(panel));
+}
+
+export function canAsk(question: string, allowedPanels: readonly PanelLabel[]) {
+  return canAnswer(topicFor(question), allowedPanels);
 }
 
 // Keeps follow-up suggestions inside the profile's access, topping up from its own tabs.
@@ -649,20 +1138,20 @@ export function resolveDashboardAnswer(
   allowedPanels: readonly PanelLabel[] = panelLabels,
 ): DashboardAnswer {
   const topic = topicFor(question);
-  const panel = topicPanels[topic];
 
-  if (panel !== null && !allowedPanels.includes(panel)) {
+  if (!canAnswer(topic, allowedPanels)) {
     return {
       title: "Access restricted",
-      response: `That question draws on ${panel} data, which isn't part of your access. You can ask about ${allowedPanels.filter((label) => starterQuestionsByPanel[label]).join(", ")}.`,
+      response: `That question draws on ${topicPanels[topic]?.[0]} data, which isn't part of your access. You can ask about ${allowedPanels.filter((label) => starterQuestionsByPanel[label]).join(", ")}.`,
       suggestions: permittedSuggestions([], allowedPanels),
     };
   }
 
   const answer = dashboardAnswers[topic];
+  const forward = (forwardFollowUps[topic] ?? []).map((key) => forwardQuestions[key].question);
   return {
     title: answer.title,
     response: answer.response,
-    suggestions: permittedSuggestions(answer.suggestions, allowedPanels),
+    suggestions: permittedSuggestions([...forward, ...answer.suggestions], allowedPanels),
   };
 }

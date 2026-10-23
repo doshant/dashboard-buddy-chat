@@ -429,7 +429,7 @@ export function OverviewPanel() {
 
         <DashboardPanel
           title="New Patients (First Dose)"
-          subtitle="First intrathecal loading dose · EAP transition vs new to brand"
+          subtitle="First loading dose · EAP transition vs new to brand"
           className="col-span-12 md:col-span-6 xl:col-span-4"
         >
           <StackedMonthlyBars

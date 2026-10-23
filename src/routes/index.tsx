@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentType,
@@ -12,11 +13,11 @@ import {
   Activity,
   Bot,
   Check,
+  Gauge,
   ChevronDown,
   Download,
   FileSpreadsheet,
   FileText,
-  Hospital,
   Info,
   LayoutDashboard,
   Lock,
@@ -27,6 +28,7 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  TriangleAlert,
   X,
 } from "lucide-react";
 import {
@@ -44,6 +46,10 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input";
+import { ChatTableCell, ResizableHeaderCell } from "@/components/chat-table";
+import { DashboardDataProvider } from "@/components/dashboard/dashboard-data-context";
+import { ExecutivePanel } from "@/components/dashboard/executive-panel";
+import { FieldPanel } from "@/components/dashboard/field-panel";
 import { MarketAccessPanel } from "@/components/dashboard/market-access-panel";
 import { MarketingPanel } from "@/components/dashboard/marketing-panel";
 import { OverviewPanel } from "@/components/dashboard/overview-panel";
@@ -72,18 +78,21 @@ import {
   starterQuestionsFor,
   type PanelLabel,
 } from "@/lib/dashboard-data";
+import { attentionSignalsFor } from "@/lib/outlook-data";
+import { buildDashboardData } from "@/lib/scoped-data";
+import type { Geography, TimePeriod } from "@/lib/scope";
 import { downloadCsv, downloadXlsx, exportFileName, tablesFromMarkdown } from "@/lib/table-export";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Launch Tracker | AUXO Analytics" },
+      { title: "Launch Tracker" },
       {
         name: "description",
         content:
           "Track the launch: patient funnel, ex-factory vials and net sales, forecast attainment, market access, payer mix, and channel inventory.",
       },
-      { property: "og:title", content: "Launch Tracker | AUXO Analytics" },
+      { property: "og:title", content: "Launch Tracker" },
       {
         property: "og:description",
         content:
@@ -109,6 +118,9 @@ const chatWidthDefault = 520;
 const chatWidthMin = 380;
 const chatWidthMax = 960;
 
+// Assistant reply tables: resizable column headers; values centred, text left-aligned.
+const chatTableComponents = { th: ResizableHeaderCell, td: ChatTableCell };
+
 // Preset replies are "thought about" briefly, then typed out a word at a time.
 const replyThinkingMs = 2000;
 const replyWordMs = 28;
@@ -122,20 +134,43 @@ function clampChatWidth(width: number) {
   return Math.round(Math.max(chatWidthMin, Math.min(width, chatWidthMax, viewportMax)));
 }
 
-const panels: { label: PanelLabel; icon: typeof LayoutDashboard; Content?: ComponentType }[] = [
-  { label: "Overview", icon: LayoutDashboard, Content: OverviewPanel },
+// `hidden` keeps a tab's page and data in the app but leaves it out of the tab bar.
+const panels: {
+  label: PanelLabel;
+  icon: typeof LayoutDashboard;
+  Content?: ComponentType;
+  hidden?: boolean;
+  // Which header filters the tab's data responds to; unsupported ones are greyed out.
+  filters?: { geography: boolean; period: boolean };
+}[] = [
+  { label: "Executive Summary", icon: Gauge, Content: ExecutivePanel },
+  {
+    label: "Overview",
+    icon: LayoutDashboard,
+    Content: OverviewPanel,
+    hidden: true,
+    filters: { geography: false, period: false },
+  },
   { label: "Market Access", icon: ShieldCheck, Content: MarketAccessPanel },
   { label: "Marketing", icon: Megaphone, Content: MarketingPanel },
-  { label: "Site of Care", icon: Hospital },
-  { label: "Field Activity", icon: MapPinned },
+  { label: "Field Activity", icon: MapPinned, Content: FieldPanel },
 ];
 
 function LaunchTracker() {
   const [geographyLevel, setGeographyLevel] = useState<string>("Nation");
   const [geographyName, setGeographyName] = useState<string>("Nation");
   const [timePeriod, setTimePeriod] = useState<string>("Launch to Date");
+  // Figures for the selected geography and period; every tab reads them from context.
+  const dashboardData = useMemo(
+    () =>
+      buildDashboardData({
+        geography: geographyName as Geography,
+        period: timePeriod as TimePeriod,
+      }),
+    [geographyName, timePeriod],
+  );
   const [profileId, setProfileId] = useState(profiles[0]!.id);
-  const [activePanel, setActivePanel] = useState<PanelLabel>("Overview");
+  const [activePanel, setActivePanel] = useState<PanelLabel>("Executive Summary");
   const [chatOpen, setChatOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatWidth, setChatWidth] = useState(chatWidthDefault);
@@ -184,11 +219,14 @@ function LaunchTracker() {
   }, [chatOpen, messages.length]);
 
   const profile = profiles.find((item) => item.id === profileId) ?? profiles[0]!;
-  const visiblePanels = panels.filter((item) => profile.panels.includes(item.label));
+  const shownPanels = panels.filter((item) => !item.hidden);
+  const visiblePanels = shownPanels.filter((item) => profile.panels.includes(item.label));
   const panel = visiblePanels.find((item) => item.label === activePanel) ?? visiblePanels[0] ?? panels[0]!;
   const PanelIcon = panel.icon;
+  const panelFilters = panel.filters ?? { geography: true, period: true };
   const starterQuestions = starterQuestionsFor(panel.label);
-  const isRestricted = visiblePanels.length < panels.length;
+  const attentionSignals = attentionSignalsFor(panel.label, profile.panels);
+  const isRestricted = visiblePanels.length < shownPanels.length;
 
   function switchProfile(id: string) {
     const next = profiles.find((item) => item.id === id);
@@ -244,7 +282,7 @@ function LaunchTracker() {
 
   return (
     <main className="min-h-screen bg-background font-dashboard text-foreground">
-      <div className="mx-auto min-h-screen max-w-[1800px] px-3 pb-24 pt-4 sm:px-5 sm:pb-20 sm:pt-5 xl:px-7">
+      <div className="mx-auto min-h-screen max-w-[1800px] px-3 pb-36 pt-4 sm:px-5 sm:pt-5 xl:px-7">
         <header className="mb-5 flex flex-wrap items-center justify-between gap-x-7 gap-y-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="grid size-9 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground">
@@ -252,7 +290,7 @@ function LaunchTracker() {
             </div>
             <div className="min-w-0">
               <p className="truncate text-[11px] font-semibold uppercase text-muted-foreground">
-                AUXO launch tracker · Data through {dataThrough}
+                Launch tracker · Data through {dataThrough}
               </p>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <h1 className="text-[23px] font-bold leading-tight text-primary sm:text-[26px]">
@@ -272,27 +310,43 @@ function LaunchTracker() {
               label="Geography Level"
               value={geographyLevel}
               values={filters.geographyLevels}
-              onChange={setGeographyLevel}
+              disabledReason={panelFilters.geography ? undefined : `${panel.label} shows national figures only`}
+              onChange={(level) => {
+                setGeographyLevel(level);
+                setGeographyName(level === "Region" ? filters.regionNames[0] : "Nation");
+              }}
             />
-            <FilterSelect
-              label="Geography Name"
-              value={geographyName}
-              values={filters.geographyNames}
-              onChange={setGeographyName}
-            />
+            {geographyLevel === "Region" ? (
+              <FilterSelect
+                label="Geography Name"
+                value={geographyName}
+                values={filters.regionNames}
+                disabledReason={panelFilters.geography ? undefined : `${panel.label} shows national figures only`}
+                onChange={setGeographyName}
+              />
+            ) : (
+              <div className="grid min-w-[98px] flex-1 gap-1 text-[11px] leading-none text-foreground sm:min-w-[120px] sm:flex-none">
+                <span>Geography Name</span>
+                <span className="flex h-8 items-center border border-border bg-secondary/50 px-2 text-xs text-muted-foreground">
+                  Nation
+                </span>
+              </div>
+            )}
             <FilterSelect
               label="Time Period"
               value={timePeriod}
               values={filters.timePeriods}
+              disabledReason={panelFilters.period ? undefined : `${panel.label} shows launch-to-date figures only`}
               onChange={setTimePeriod}
             />
             <div className="ml-1 hidden items-center gap-3 border-l border-border pl-4 sm:flex">
-              <div className="flex items-center gap-2" aria-label="AUXO analytics">
-                <span className="grid size-7 place-items-center rounded-md bg-primary text-xs font-bold text-primary-foreground">
-                  X
-                </span>
-                <span className="text-lg font-bold text-primary">AUXO</span>
-              </div>
+              <span
+                role="img"
+                aria-label="AUXO"
+                className="grid size-7 place-items-center rounded-md bg-primary text-xs font-bold text-primary-foreground"
+              >
+                X
+              </span>
             </div>
             <ProfileSwitcher activeId={profile.id} onSwitch={switchProfile} />
             <Button variant="ghost" size="icon" aria-label="About this dashboard" title="About this dashboard" className="hidden text-brand-bright-blue sm:inline-flex">
@@ -302,7 +356,9 @@ function LaunchTracker() {
         </header>
 
         {panel.Content ? (
-          <panel.Content />
+          <DashboardDataProvider value={dashboardData}>
+            <panel.Content />
+          </DashboardDataProvider>
         ) : (
           <section className="dashboard-panel flex min-h-[420px] flex-col items-center justify-center gap-4 px-6 text-center">
             <div className="grid size-14 place-items-center rounded-full bg-secondary text-primary">
@@ -340,7 +396,7 @@ function LaunchTracker() {
       </nav>
 
       {chatOpen ? (
-        <aside aria-label="Dashboard Assistant" style={{ width: `min(${chatWidth}px, calc(100vw - 24px))` }} className="fixed bottom-[74px] right-3 z-40 flex h-[min(690px,calc(100dvh-96px))] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl sm:bottom-6 sm:right-6">
+        <aside aria-label="Dashboard Assistant" style={{ width: `min(${chatWidth}px, calc(100vw - 24px))` }} className="fixed bottom-20 right-3 z-40 flex h-[min(690px,calc(100dvh-100px))] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl sm:right-6">
           <div
             role="separator"
             aria-orientation="vertical"
@@ -386,7 +442,7 @@ function LaunchTracker() {
                       {revealing?.shown === 0 ? (
                         <TypingDots />
                       ) : (
-                        <MessageResponse controls={{ table: false }} isAnimating={Boolean(revealing)}>
+                        <MessageResponse controls={{ table: false }} components={chatTableComponents} isAnimating={Boolean(revealing)}>
                           {revealing ? message.text.slice(0, revealing.shown) : message.text}
                         </MessageResponse>
                       )}
@@ -401,6 +457,26 @@ function LaunchTracker() {
 
           {messages.length === 0 && (
             <div className="shrink-0 px-4 pb-3">
+              {attentionSignals.length > 0 && (
+                <div className="mb-3">
+                  <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase text-muted-foreground">
+                    <TriangleAlert size={13} className="text-watch" /> Flagged in the data
+                  </p>
+                  <div className="grid gap-1.5">
+                    {attentionSignals.map((signal) => (
+                      <button
+                        key={signal.question}
+                        type="button"
+                        onClick={() => sendQuestion(signal.question)}
+                        className="rounded-md border border-watch/30 bg-watch/5 px-2.5 py-2 text-left leading-snug transition-colors hover:bg-watch/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <span className="block text-[11px] font-medium text-foreground">{signal.question}</span>
+                        <span className="block text-[10px] text-muted-foreground">{signal.reason}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase text-muted-foreground">
                 <Sparkles size={13} className="text-primary" /> Suggested questions
               </p>
@@ -424,7 +500,7 @@ function LaunchTracker() {
           onClick={() => setChatOpen(true)}
           aria-label="Open Dashboard Assistant"
           title="Open Dashboard Assistant"
-          className="fixed bottom-[79px] right-4 z-30 size-12 rounded-full shadow-lg sm:bottom-6 sm:right-6"
+          className="chat-launcher fixed bottom-20 z-30 size-12 rounded-full shadow-lg"
         >
           <MessageCircle size={21} />
           <span className="sr-only">Dashboard Assistant</span>
@@ -561,16 +637,23 @@ function FilterSelect({
   value,
   values,
   onChange,
+  disabledReason,
 }: {
   label: string;
   value: string;
   values: readonly string[];
   onChange: (value: string) => void;
+  // When set, the filter doesn't apply to the current tab: it is greyed out and says why.
+  disabledReason?: string | undefined;
 }) {
+  const disabled = Boolean(disabledReason);
   return (
-    <label className="grid min-w-[98px] flex-1 gap-1 text-[11px] leading-none text-foreground sm:min-w-[120px] sm:flex-none">
+    <label
+      title={disabledReason}
+      className={`grid min-w-[98px] flex-1 gap-1 text-[11px] leading-none text-foreground sm:min-w-[120px] sm:flex-none ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
+    >
       <span>{label}</span>
-      <Select value={value} onValueChange={onChange}>
+      <Select value={value} onValueChange={onChange} disabled={disabled}>
         <SelectTrigger className="h-8 rounded-none border-border bg-card px-2 text-xs shadow-none">
           <SelectValue />
         </SelectTrigger>

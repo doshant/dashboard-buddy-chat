@@ -22,20 +22,10 @@ import {
   StackedMonthlyBars,
   StatCard,
 } from "@/components/dashboard/primitives";
-import {
-  emailByAudience,
-  emailFunnel,
-  engagementByMonth,
-  formatCount,
-  formatRate,
-  highValueActions,
-  impressionsByChannel,
-  impressionsByMonth,
-  marketingKpis,
-  regionalSummary,
-  regionalTotal,
-  websiteVisitsByMonth,
-} from "@/lib/marketing-data";
+import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
+import { formatCount, formatRate, withRates } from "@/lib/marketing-data";
+
+type RegionRow = ReturnType<typeof withRates>;
 
 const channelSeries: Series[] = [
   { key: "display", label: "Display ads", color: "series-1" },
@@ -51,19 +41,31 @@ const audienceSeries: Series[] = [
 ];
 
 const regionColumns = [
-  { label: "Impressions", value: (row: typeof regionalTotal) => formatCount(row.impressions) },
+  { label: "Impressions", value: (row: RegionRow) => formatCount(row.impressions) },
   {
     label: "Engagement rate",
-    value: (row: typeof regionalTotal) => formatRate(row.engagementRate),
+    value: (row: RegionRow) => formatRate(row.engagementRate),
   },
-  { label: "Website visits", value: (row: typeof regionalTotal) => formatCount(row.visits) },
-  { label: "HVA rate", value: (row: typeof regionalTotal) => formatRate(row.hvaRate) },
-  { label: "Delivered emails", value: (row: typeof regionalTotal) => formatCount(row.delivered) },
-  { label: "Open rate", value: (row: typeof regionalTotal) => formatRate(row.openRate) },
-  { label: "Click rate", value: (row: typeof regionalTotal) => formatRate(row.clickRate) },
+  { label: "Website visits", value: (row: RegionRow) => formatCount(row.visits) },
+  { label: "HVA rate", value: (row: RegionRow) => formatRate(row.hvaRate) },
+  { label: "Delivered emails", value: (row: RegionRow) => formatCount(row.delivered) },
+  { label: "Open rate", value: (row: RegionRow) => formatRate(row.openRate) },
+  { label: "Click rate", value: (row: RegionRow) => formatRate(row.clickRate) },
 ];
 
 export function MarketingPanel() {
+  const { marketing, regional, scope, period } = useDashboardData();
+  const {
+    emailByAudience,
+    emailFunnel,
+    engagementByMonth,
+    highValueActions,
+    impressionsByChannel,
+    impressionsByMonth,
+    marketingKpis,
+    websiteVisitsByMonth,
+  } = marketing;
+  const { rows: regionalSummary, total: regionalTotal } = regional.marketing;
   const { impressions, engagement, website, hva, email } = marketingKpis;
   const funnelRows = emailFunnel.map((row, i) => {
     const previous = emailFunnel[i - 1];
@@ -88,7 +90,7 @@ export function MarketingPanel() {
           value={formatCount(impressions.total)}
           detail="Display, pre-roll video, social and paid search"
           comparison={{
-            text: `${formatCount(impressions.latestMonth)} in M9, up from ${formatCount(impressions.firstMonth)} in M1`,
+            text: `${formatCount(impressions.latestMonth)} in ${impressions.latestMonthLabel}, up from ${formatCount(impressions.firstMonth)} in ${impressions.firstMonthLabel}`,
             direction: "up",
           }}
         />
@@ -98,7 +100,7 @@ export function MarketingPanel() {
           value={formatRate(engagement.rate)}
           detail={`${formatCount(engagement.clicks)} clicks + ${formatCount(engagement.videoViews)} video views`}
           comparison={{
-            text: `${formatRate(engagement.latestMonthRate)} in M9 vs ${formatRate(engagement.firstMonthRate)} in M1`,
+            text: `${formatRate(engagement.latestMonthRate)} in ${impressions.latestMonthLabel} vs ${formatRate(engagement.firstMonthRate)} in ${impressions.firstMonthLabel}`,
             direction: "up",
           }}
         />
@@ -155,7 +157,7 @@ export function MarketingPanel() {
 
         <DashboardPanel
           title="Impressions by Channel"
-          subtitle={`${formatCount(impressions.total)} impressions since launch (k) · share of total`}
+          subtitle={`${formatCount(impressions.total)} impressions ${period.long} (k) · share of total`}
           className="col-span-12 md:col-span-6 xl:col-span-4"
         >
           <RankedBars
@@ -271,7 +273,7 @@ export function MarketingPanel() {
 
         <DashboardPanel
           title="Regional Marketing Summary"
-          subtitle="Marketing KPIs by region · totals match the cards above"
+          subtitle={`Marketing KPIs by region, ${period.long} · ${scope.geography === "Nation" ? "totals match the cards above" : `${scope.geography} highlighted; totals are national`}`}
           className="col-span-12"
         >
           <div className="overflow-x-auto">
@@ -294,7 +296,10 @@ export function MarketingPanel() {
               </thead>
               <tbody>
                 {regionalSummary.map((row) => (
-                  <tr key={row.region} className="border-b border-border/60">
+                  <tr
+                    key={row.region}
+                    className={`border-b border-border/60 ${row.region === scope.geography ? "bg-secondary/70" : ""}`}
+                  >
                     <th scope="row" className="py-2 pr-3 font-semibold">
                       {row.region}
                     </th>

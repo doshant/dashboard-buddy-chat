@@ -15,12 +15,24 @@ const byName = (name: string) => {
 const overviewQuestion = "How are we tracking against forecast?";
 const marketAccessQuestion = "What is our PA approval rate?";
 const marketingQuestion = "How are our emails performing?";
+const fieldQuestion = "How many calls has the field team made?";
 
 describe("Demo profile access", () => {
-  it("gives Jenny every tab, Bob only Market Access and Jeff only Marketing", () => {
+  it("gives Jenny every tab, and Bob and Jeff the Executive Summary plus their own tab", () => {
     expect(byName("Jenny").panels).toEqual(panelLabels);
-    expect(byName("Bob").panels).toEqual(["Market Access"]);
-    expect(byName("Jeff").panels).toEqual(["Marketing"]);
+    expect(byName("Bob").panels).toEqual(["Executive Summary", "Market Access"]);
+    expect(byName("Jeff").panels).toEqual(["Executive Summary", "Marketing"]);
+  });
+
+  it("gives every profile the Executive Summary, and answers its questions for everyone", () => {
+    for (const profile of profiles) {
+      expect(profile.panels).toContain("Executive Summary");
+      for (const question of starterQuestionsFor("Executive Summary")) {
+        expect(resolveDashboardAnswer(question, profile.panels).response).not.toContain(
+          "isn't part of your access",
+        );
+      }
+    }
   });
 
   it("lets Jenny's assistant answer from any tab", () => {
@@ -35,8 +47,8 @@ describe("Demo profile access", () => {
   it("stops the assistant from revealing data outside a profile's tabs", () => {
     const bob = byName("Bob").panels;
     expect(resolveDashboardAnswer(marketAccessQuestion, bob).response).toContain("95%");
-    expect(resolveDashboardAnswer(overviewQuestion, bob).response).toBe(
-      "That question draws on Overview data, which isn't part of your access. You can ask about Market Access.",
+    expect(resolveDashboardAnswer(fieldQuestion, bob).response).toBe(
+      "That question draws on Field Activity data, which isn't part of your access. You can ask about Executive Summary, Market Access.",
     );
     expect(resolveDashboardAnswer(marketingQuestion, bob).response).not.toContain("67.4k");
 

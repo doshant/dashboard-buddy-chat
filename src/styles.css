@@ -16,6 +16,9 @@
   --color-target: var(--target);
   --color-trend-up: var(--trend-up);
   --color-trend-down: var(--trend-down);
+  --color-watch: var(--watch);
+  --color-brand-orange: var(--brand-orange);
+  --color-brand-green: var(--brand-green);
   --color-brand-blue: var(--brand-blue);
   --color-brand-navy: var(--brand-navy);
   --color-brand-bright-blue: var(--brand-bright-blue);
@@ -92,6 +95,11 @@
   --brand-green: #36a463;
   --brand-orange: #ff8d1a;
   --link: #008ce3;
+  /* Assistant reply tables: tints of the brand blue. */
+  --chat-table-surface: #f2f7fe;
+  --chat-table-header: #dceafc;
+  --chat-table-stripe: #f6f9fe;
+  --chat-table-border: #cfe0f7;
   --radius: 0.5rem;
   --background: #f3f6fb;
   --foreground: #000000;
@@ -138,9 +146,15 @@
   /* Brand green and red, darkened just enough to read as small text on white (4.5:1). */
   --trend-up: #24804a;
   --trend-down: #c23a3f;
+  /* Brand orange darkened to read as text on white; used for "watch" badges. */
+  --watch: #a65400;
 }
 
 .dark {
+  --chat-table-surface: #0f2149;
+  --chat-table-header: #1a3266;
+  --chat-table-stripe: #112552;
+  --chat-table-border: #24407a;
   --background: #06122e;
   --foreground: #f5f8fd;
   --card: #0d1c40;
@@ -183,6 +197,7 @@
   --target: #8d98ab;
   --trend-up: var(--brand-light-green);
   --trend-down: #ef7a7e;
+  --watch: #ffad5c;
 }
 
 @layer base {
@@ -234,6 +249,84 @@
 .chat-transcript [data-streamdown="table-header-cell"]:not(:first-child),
 .chat-transcript [data-streamdown="table-cell"]:not(:first-child) {
   white-space: nowrap;
+}
+
+/* Column resize handle on assistant table headers; once a column is resized the table switches
+   to fixed widths, so long cells wrap instead of spilling into the next column. */
+.chat-column-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  z-index: 1;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.chat-column-handle:hover,
+.chat-column-handle:focus-visible {
+  background: color-mix(in oklab, var(--color-primary) 35%, transparent);
+  outline: none;
+}
+
+.chat-transcript [data-streamdown="table"] {
+  min-width: 100%;
+}
+
+.chat-transcript table[data-resized] [data-streamdown="table-header-cell"],
+.chat-transcript table[data-resized] [data-streamdown="table-cell"] {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Light brand-blue tables instead of Streamdown's grey defaults. */
+.chat-transcript [data-streamdown="table-wrapper"] {
+  border-color: var(--chat-table-border);
+  background: var(--chat-table-surface);
+  padding: 0.3rem;
+}
+
+.chat-transcript [data-streamdown="table-wrapper"] > div {
+  border-color: var(--chat-table-border);
+  background: var(--color-card);
+}
+
+.chat-transcript [data-streamdown="table"],
+.chat-transcript [data-streamdown="table-body"],
+.chat-transcript [data-streamdown="table-row"] {
+  border-color: var(--chat-table-border);
+}
+
+.chat-transcript [data-streamdown="table-header"] {
+  background: var(--chat-table-header);
+}
+
+.chat-transcript [data-streamdown="table-header-cell"] {
+  color: var(--brand-navy);
+}
+
+.chat-transcript [data-streamdown="table-body"] [data-streamdown="table-row"]:nth-child(even) {
+  background: var(--chat-table-stripe);
+}
+
+/* Assistant launcher: centred in the gutter between the content's right edge and the window edge.
+   The gutter is the page padding plus any space beyond the 1800px content width. */
+.chat-launcher {
+  --page-pad: 0.75rem;
+  right: max(4px, calc((var(--page-pad) + max(0px, (100% - 1800px) / 2)) / 2 - 24px));
+}
+
+@media (min-width: 640px) {
+  .chat-launcher {
+    --page-pad: 1.25rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .chat-launcher {
+    --page-pad: 1.75rem;
+  }
 }
 
 /* Four grey dots rising in a wave while the assistant "thinks". */
