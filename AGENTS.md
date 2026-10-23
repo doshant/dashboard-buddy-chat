@@ -11,4 +11,4 @@
 
 ## Dashboard prototype
 
-- Keep the Executive Summary's reference metrics and canned assistant replies in a browser-safe data module, with chart rendering and transient chat state in the page, so this demo remains deterministic and backend-free.
+- Keep the Ulefnersen Overview's reference metrics and canned assistant replies in a browser-safe data module, with chart rendering and transient chat state in the page, so this demo remains deterministic and backend-free.

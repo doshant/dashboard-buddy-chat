@@ -5,16 +5,14 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --color-rengene: var(--rengene);
-  --color-staquala: var(--staquala);
-  --color-pie-lavender: var(--pie-lavender);
-  --color-pie-violet: var(--pie-violet);
-  --color-pie-rose: var(--pie-rose);
-  --color-pie-ice: var(--pie-ice);
-  --color-claim-approved: var(--claim-approved);
-  --color-claim-rejected: var(--claim-rejected);
-  --color-claim-abandoned: var(--claim-abandoned);
-  --color-claim-base: var(--claim-base);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-series-3: var(--series-3);
+  --color-series-4: var(--series-4);
+  --color-aging-1: var(--aging-1);
+  --color-aging-2: var(--aging-2);
+  --color-aging-3: var(--aging-3);
+  --color-target: var(--target);
   --color-trend-up: var(--trend-up);
   --color-trend-down: var(--trend-down);
   --font-dashboard: Arial, Helvetica, sans-serif;
@@ -111,16 +109,15 @@
   --sidebar-accent-foreground: oklch(0.31 0.12 291);
   --sidebar-border: oklch(0.892 0.021 292);
   --sidebar-ring: oklch(0.58 0.12 291);
-  --rengene: oklch(0.79 0.105 292);
-  --staquala: oklch(0.83 0.105 147);
-  --pie-lavender: oklch(0.79 0.105 292);
-  --pie-violet: oklch(0.69 0.13 291);
-  --pie-rose: oklch(0.86 0.045 291);
-  --pie-ice: oklch(0.92 0.025 291);
-  --claim-approved: oklch(0.57 0.115 291);
-  --claim-rejected: oklch(0.37 0.115 291);
-  --claim-abandoned: oklch(0.27 0.09 291);
-  --claim-base: oklch(0.38 0.065 291);
+  /* Categorical chart slots, validated for CVD separation on the card surface. */
+  --series-1: #6250d6;
+  --series-2: #1baf7a;
+  --series-3: #eb6834;
+  --series-4: #2a78d6;
+  --aging-1: oklch(0.82 0.07 291);
+  --aging-2: oklch(0.6 0.14 291);
+  --aging-3: oklch(0.38 0.14 291);
+  --target: oklch(0.45 0.03 290);
   --trend-up: oklch(0.46 0.13 146);
   --trend-down: oklch(0.53 0.17 38);
 }
@@ -158,16 +155,14 @@
   --sidebar-accent-foreground: oklch(0.95 0.01 292);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.72 0.08 291);
-  --rengene: oklch(0.7 0.14 292);
-  --staquala: oklch(0.75 0.12 147);
-  --pie-lavender: oklch(0.7 0.14 292);
-  --pie-violet: oklch(0.66 0.16 290);
-  --pie-rose: oklch(0.77 0.06 291);
-  --pie-ice: oklch(0.84 0.025 291);
-  --claim-approved: oklch(0.66 0.16 290);
-  --claim-rejected: oklch(0.42 0.1 291);
-  --claim-abandoned: oklch(0.31 0.065 291);
-  --claim-base: oklch(0.51 0.07 291);
+  --series-1: #9085e9;
+  --series-2: #199e70;
+  --series-3: #d95926;
+  --series-4: #3987e5;
+  --aging-1: oklch(0.45 0.08 291);
+  --aging-2: oklch(0.62 0.13 291);
+  --aging-3: oklch(0.82 0.08 291);
+  --target: oklch(0.82 0.02 291);
   --trend-up: oklch(0.74 0.12 146);
   --trend-down: oklch(0.75 0.12 38);
 }
@@ -186,7 +181,7 @@
 
 .dashboard-chart {
   width: 100%;
-  height: 100%;
+  /* height: 100%; */
   min-height: 0;
 }
 

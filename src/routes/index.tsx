@@ -1,40 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ComponentType, type FormEvent } from "react";
 import {
   Activity,
-  ArrowDownRight,
-  ArrowUpRight,
-  BarChart3,
   Bot,
-  ChartNoAxesCombined,
+  Check,
   ChevronDown,
-  ClipboardList,
-  FileChartColumn,
+  Hospital,
   Info,
+  LayoutDashboard,
+  Lock,
+  MapPinned,
+  Megaphone,
   MessageCircle,
-  MessageSquareText,
-  PenLine,
+  PackageCheck,
   RotateCcw,
   Send,
+  ShieldCheck,
   Sparkles,
-  UsersRound,
   X,
 } from "lucide-react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  LabelList,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import {
   Conversation,
   ConversationContent,
@@ -50,7 +34,18 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input";
+import { MarketAccessPanel } from "@/components/dashboard/market-access-panel";
+import { MarketingPanel } from "@/components/dashboard/marketing-panel";
+import { OverviewPanel } from "@/components/dashboard/overview-panel";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -59,54 +54,55 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  callAttainment,
-  claimStatus,
-  dashboardAnswers,
-  engagement,
+  accessSummary,
+  brand,
+  dataThrough,
   filters,
-  monthlyShare,
-  products,
+  profiles,
   resolveDashboardAnswer,
-  salesAttainment,
-  starterQuestions,
+  starterQuestionsFor,
+  type PanelLabel,
 } from "@/lib/dashboard-data";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Executive Summary | AUXO Analytics" },
+      { title: "Ulefnersen Launch Tracker | AUXO Analytics" },
       {
         name: "description",
         content:
-          "Explore prescription, writer, unit sales, market share, engagement, and claim status in the AUXO Analytics Executive Summary demo.",
+          "Track the Ulefnersen launch: patient funnel, ex-factory vials and net sales, forecast attainment, market access, payer mix, and channel inventory.",
       },
-      { property: "og:title", content: "Executive Summary | AUXO Analytics" },
+      { property: "og:title", content: "Ulefnersen Launch Tracker | AUXO Analytics" },
       {
         property: "og:description",
         content:
-          "An interactive executive analytics demo for prescription, sales, and market share trends.",
+          "An interactive launch tracking demo for Ulefnersen patients, vials, net sales, and market access.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
-  component: ExecutiveSummary,
+  component: LaunchTracker,
 });
 
-type ChatMessage = { id: number; role: "user" | "assistant"; text: string };
+type ChatMessage = { id: number; role: "user" | "assistant"; text: string; suggestions?: string[] };
 
-const panels = [
-  { label: "Executive Summary", icon: FileChartColumn },
-  { label: "Performance", icon: BarChart3 },
-  { label: "Engagement", icon: UsersRound },
-  { label: "Claims", icon: ClipboardList },
+const panels: { label: PanelLabel; icon: typeof LayoutDashboard; Content?: ComponentType }[] = [
+  { label: "Overview", icon: LayoutDashboard, Content: OverviewPanel },
+  { label: "Market Access", icon: ShieldCheck, Content: MarketAccessPanel },
+  { label: "Site of Care", icon: Hospital },
+  { label: "Field Activity", icon: MapPinned },
+  { label: "Enrollment & Dispense Mix", icon: PackageCheck },
+  { label: "Marketing", icon: Megaphone, Content: MarketingPanel },
 ];
 
-function ExecutiveSummary() {
+function LaunchTracker() {
   const [geographyLevel, setGeographyLevel] = useState<string>("Nation");
   const [geographyName, setGeographyName] = useState<string>("Nation");
-  const [timePeriod, setTimePeriod] = useState<string>("R13M");
-  const [activePanel, setActivePanel] = useState("Executive Summary");
+  const [timePeriod, setTimePeriod] = useState<string>("Launch to Date");
+  const [profileId, setProfileId] = useState(profiles[0]!.id);
+  const [activePanel, setActivePanel] = useState<PanelLabel>("Overview");
   const [chatOpen, setChatOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -116,12 +112,28 @@ function ExecutiveSummary() {
     textareaRef.current?.focus();
   }, [chatOpen, messages.length]);
 
+  const profile = profiles.find((item) => item.id === profileId) ?? profiles[0]!;
+  const visiblePanels = panels.filter((item) => profile.panels.includes(item.label));
+  const panel = visiblePanels.find((item) => item.label === activePanel) ?? visiblePanels[0] ?? panels[0]!;
+  const PanelIcon = panel.icon;
+  const starterQuestions = starterQuestionsFor(panel.label);
+  const isRestricted = visiblePanels.length < panels.length;
+
+  function switchProfile(id: string) {
+    const next = profiles.find((item) => item.id === id);
+    if (!next || next.id === profile.id) return;
+    setProfileId(next.id);
+    // The transcript may quote data the next profile can't see, so it doesn't carry over.
+    setMessages([]);
+    if (!next.panels.includes(panel.label)) setActivePanel(next.panels[0] ?? "Overview");
+  }
+
   function sendQuestion(question: string) {
-    const answer = resolveDashboardAnswer(question);
+    const answer = resolveDashboardAnswer(question, profile.panels);
     setMessages((current) => [
       ...current,
       { id: Date.now(), role: "user", text: question },
-      { id: Date.now() + 1, role: "assistant", text: answer.response },
+      { id: Date.now() + 1, role: "assistant", text: answer.response, suggestions: answer.suggestions },
     ]);
   }
 
@@ -144,11 +156,19 @@ function ExecutiveSummary() {
             </div>
             <div className="min-w-0">
               <p className="truncate text-[11px] font-semibold uppercase text-muted-foreground">
-                AUXO / Commercial analytics
+                AUXO / {brand} launch tracker · Data through {dataThrough}
               </p>
-              <h1 className="text-[23px] font-bold leading-tight text-primary sm:text-[26px]">
-                {activePanel}
-              </h1>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <h1 className="text-[23px] font-bold leading-tight text-primary sm:text-[26px]">
+                  {panel.label}
+                </h1>
+                {isRestricted && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground">
+                    <Lock size={12} aria-hidden="true" />
+                    Limited access · {accessSummary(profile.panels)}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex w-full flex-wrap items-end gap-2.5 sm:w-auto sm:gap-4">
@@ -177,148 +197,23 @@ function ExecutiveSummary() {
                 </span>
                 <span className="text-lg font-bold text-primary">AUXO</span>
               </div>
-              <div className="flex items-center gap-2.5 border-l border-border pl-3">
-                <span className="grid size-8 place-items-center rounded-full bg-secondary text-lg" aria-hidden="true">
-                  👩🏻‍💼
-                </span>
-                <span className="text-xs leading-[1.3]">
-                  <span className="block font-bold">Welcome back,</span>
-                  <span>Jenny</span>
-                </span>
-              </div>
-              <Button variant="ghost" size="icon" aria-label="About this dashboard" title="About this dashboard" className="text-sky-700">
-                <Info size={20} />
-              </Button>
             </div>
+            <ProfileSwitcher activeId={profile.id} onSwitch={switchProfile} />
+            <Button variant="ghost" size="icon" aria-label="About this dashboard" title="About this dashboard" className="hidden text-sky-700 sm:inline-flex">
+              <Info size={20} />
+            </Button>
           </div>
         </header>
 
-        {activePanel === "Executive Summary" ? (
-          <>
-            <section aria-label="Executive KPIs" className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-              <KpiCard
-                title="Total Prescription"
-                Icon={ClipboardList}
-                metrics={[
-                  { product: "Rengene", current: "2,529", prior: "2,592", change: "−2%", direction: "down" },
-                  { product: "Staquala", current: "6,563", prior: "5,787", change: "13%", direction: "up" },
-                ]}
-              />
-              <KpiCard
-                title="Total Writers"
-                Icon={PenLine}
-                metrics={[
-                  { product: "Rengene", current: "472", prior: "562", change: "−16%", direction: "down" },
-                  { product: "Staquala", current: "1,300", prior: "997", change: "30%", direction: "up" },
-                ]}
-              />
-              <KpiCard
-                title="Unit Sales"
-                Icon={ChartNoAxesCombined}
-                metrics={[
-                  { product: "Rengene", current: "3,100", prior: "4,359", change: "−29%", direction: "down" },
-                  { product: "Staquala", current: "9,961", prior: "5,833", change: "71%", direction: "up" },
-                ]}
-              />
-            </section>
-
-            <section aria-label="Executive charts" className="dashboard-chart-grid grid grid-cols-12 gap-4">
-              <DashboardPanel title="Patient Market Share" className="col-span-12 lg:col-span-5">
-                <div className="dashboard-chart h-[220px] sm:h-[236px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={monthlyShare} margin={{ top: 17, right: 12, bottom: 4, left: -16 }}>
-                      <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 4" />
-                      <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }} interval={1} />
-                      <YAxis domain={[0, 40]} ticks={[0, 10, 20, 30, 40]} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }} />
-                      <Tooltip formatter={(value) => `${value}%`} />
-                      <Line dataKey="rengene" type="monotone" stroke="var(--color-rengene)" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }}>
-                        <LabelList dataKey="rengene" position="top" formatter={(value) => `${value}%`} style={{ fontSize: 9, fill: "var(--color-foreground)" }} />
-                      </Line>
-                      <Line dataKey="staquala" type="monotone" stroke="var(--color-staquala)" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }}>
-                        <LabelList dataKey="staquala" position="bottom" formatter={(value) => `${value}%`} style={{ fontSize: 9, fill: "var(--color-foreground)" }} />
-                      </Line>
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-                <ChartLegend items={[{ label: "Rengene", className: "bg-rengene" }, { label: "Staquala", className: "bg-staquala" }]} />
-              </DashboardPanel>
-
-              <DashboardPanel title="Attainment vs Forecast – Sales ($)" className="col-span-12 lg:col-span-4">
-                <div className="dashboard-chart h-[220px] sm:h-[236px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={salesAttainment} margin={{ top: 19, right: 9, bottom: 2, left: -17 }} barGap={0}>
-                      <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 4" />
-                      <XAxis dataKey="product" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }} />
-                      <YAxis domain={[0, 4.5]} ticks={[0, 1, 2, 3, 4]} tickFormatter={(v) => `${v}M`} tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }} />
-                      <Tooltip formatter={(value) => `$${Number(value).toFixed(1)}M`} />
-                      <Bar dataKey="forecast" name="Forecast" fill="var(--color-muted)" radius={[2, 2, 0, 0]} maxBarSize={38}>
-                        <LabelList dataKey="forecast" position="top" formatter={(v) => `$${Number(v).toFixed(1)}M`} style={{ fontSize: 9, fill: "var(--color-foreground)" }} />
-                      </Bar>
-                      <Bar dataKey="sales" name="Dollar Sales" fill="var(--color-primary)" radius={[2, 2, 0, 0]} maxBarSize={38}>
-                        <LabelList dataKey="sales" position="top" formatter={(v) => `$${Number(v).toFixed(1)}M`} style={{ fontSize: 9, fill: "var(--color-foreground)" }} />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                <ChartLegend items={[{ label: "Forecast", className: "bg-muted-foreground/30" }, { label: "Dollar Sales", className: "bg-primary" }]} />
-              </DashboardPanel>
-
-              <DashboardPanel title="Call Attainment" className="col-span-12 lg:col-span-3">
-                <div className="dashboard-chart h-[220px] sm:h-[236px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={callAttainment} layout="vertical" margin={{ top: 11, right: 33, bottom: 11, left: 3 }}>
-                      <CartesianGrid horizontal={false} stroke="var(--color-border)" strokeDasharray="3 4" />
-                      <XAxis type="number" domain={[0, 120]} ticks={[0, 50, 100]} tickFormatter={(v) => `${v}%`} tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }} />
-                      <YAxis type="category" dataKey="product" tickLine={false} axisLine={false} width={62} tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }} />
-                      <Tooltip formatter={(value) => `${value}%`} />
-                      <Bar dataKey="attainment" name="Claim Attainment" radius={[0, 2, 2, 0]} maxBarSize={32}>
-                        {callAttainment.map((entry, index) => <Cell key={entry.product} fill={index === 0 ? "var(--color-rengene)" : "var(--color-staquala)"} />)}
-                        <LabelList dataKey="attainment" position="right" formatter={(v) => `${v}%`} style={{ fontSize: 9, fill: "var(--color-foreground)" }} />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                <p className="-mt-1 text-center text-[9px] text-muted-foreground">Claim Attainment %</p>
-              </DashboardPanel>
-
-              <DashboardPanel title="Digital HCP Engagement" className="col-span-12 lg:col-span-9" centeredTitle>
-                <div className="grid h-[236px] grid-cols-1 gap-1 sm:grid-cols-2">
-                  <EngagementPie values={engagement.rengene} product="Rengene" colors={["var(--color-pie-violet)", "var(--color-rengene)", "var(--color-pie-rose)", "var(--color-pie-ice)"]} />
-                  <EngagementPie values={engagement.staquala} product="Staquala" colors={["var(--color-claim-base)", "var(--color-staquala)", "var(--color-chart-4)", "var(--color-pie-ice)"]} />
-                </div>
-              </DashboardPanel>
-
-              <DashboardPanel title="Claim Status" className="col-span-12 lg:col-span-3">
-                <div className="dashboard-chart h-[225px] sm:h-[236px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={claimStatus} margin={{ top: 5, right: 7, bottom: 2, left: -22 }} barGap={20}>
-                      <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 4" />
-                      <XAxis dataKey="product" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }} />
-                      <YAxis domain={[0, 100]} ticks={[0, 20, 40, 60, 80, 100]} tickFormatter={(v) => `${v}%`} tickLine={false} axisLine={false} tick={{ fontSize: 8, fill: "var(--color-muted-foreground)" }} />
-                      <Tooltip formatter={(value) => `${value}%`} />
-                      <Bar dataKey="approved" name="% Approved" stackId="claim" fill="var(--color-claim-approved)" maxBarSize={51}>
-                        <LabelList dataKey="approved" position="center" formatter={(v) => `${Number(v).toFixed(2)}%`} style={{ fontSize: 8, fill: "var(--color-primary-foreground)" }} />
-                      </Bar>
-                      <Bar dataKey="rejected" name="% Rejected" stackId="claim" fill="var(--color-claim-rejected)" maxBarSize={51}>
-                        <LabelList dataKey="rejected" position="center" formatter={(v) => `${Number(v).toFixed(2)}%`} style={{ fontSize: 8, fill: "var(--color-primary-foreground)" }} />
-                      </Bar>
-                      <Bar dataKey="abandoned" name="% Abandoned" stackId="claim" fill="var(--color-claim-abandoned)" maxBarSize={51}>
-                        <LabelList dataKey="abandoned" position="center" formatter={(v) => `${Number(v).toFixed(2)}%`} style={{ fontSize: 8, fill: "var(--color-primary-foreground)" }} />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                <ChartLegend items={[{ label: "% Approved", className: "bg-claim-approved" }, { label: "% Rejected", className: "bg-claim-rejected" }, { label: "% Abandoned", className: "bg-claim-abandoned" }]} />
-              </DashboardPanel>
-            </section>
-          </>
+        {panel.Content ? (
+          <panel.Content />
         ) : (
           <section className="dashboard-panel flex min-h-[420px] flex-col items-center justify-center gap-4 px-6 text-center">
             <div className="grid size-14 place-items-center rounded-full bg-secondary text-primary">
-              {activePanel === "Performance" ? <BarChart3 size={26} /> : activePanel === "Engagement" ? <UsersRound size={26} /> : <ClipboardList size={26} />}
+              <PanelIcon size={26} />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-primary">{activePanel}</h2>
+              <h2 className="text-lg font-bold text-primary">{panel.label}</h2>
               <p className="mt-1 max-w-sm text-sm text-muted-foreground">This section is a placeholder in the demo.</p>
             </div>
           </section>
@@ -327,23 +222,23 @@ function ExecutiveSummary() {
 
       <nav aria-label="Dashboard navigation" className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-card/95 px-3 backdrop-blur-md sm:px-6">
         <div className="mx-auto flex h-[64px] max-w-[1800px] items-center gap-1 overflow-x-auto">
-          {panels.map(({ label, icon: Icon }) => (
+          {visiblePanels.map(({ label, icon: Icon, Content }) => (
             <Button
               key={label}
               type="button"
               variant="ghost"
               onClick={() => setActivePanel(label)}
-              aria-current={activePanel === label ? "page" : undefined}
-              className={`h-full shrink-0 rounded-none border-b-2 px-3 text-xs sm:px-5 ${activePanel === label ? "border-primary bg-secondary/60 font-semibold text-primary" : "border-transparent text-muted-foreground"}`}
+              aria-current={panel.label === label ? "page" : undefined}
+              className={`h-full shrink-0 rounded-none border-b-2 px-3 text-xs sm:px-5 ${panel.label === label ? "border-primary bg-secondary/60 font-semibold text-primary" : "border-transparent text-muted-foreground"}`}
             >
               <Icon size={16} />
               <span>{label}</span>
-              {label !== "Executive Summary" && <span className="sr-only">, placeholder</span>}
+              {!Content && <span className="sr-only">, placeholder</span>}
             </Button>
           ))}
           <div className="ml-auto hidden items-center gap-2 pr-2 text-[11px] text-muted-foreground sm:flex">
-            <span className="size-2 rounded-full bg-staquala" />
-            Demo data · {geographyName} · {timePeriod}
+            <span className="size-2 rounded-full bg-series-2" />
+            Demo data · {profile.name} · {geographyName} · {timePeriod}
           </div>
         </div>
       </nav>
@@ -357,7 +252,7 @@ function ExecutiveSummary() {
               </div>
               <div>
                 <p className="text-sm font-bold text-primary">Dashboard Assistant</p>
-                <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground"><span className="size-1.5 rounded-full bg-staquala" />Ready to help</p>
+                <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground"><span className="size-1.5 rounded-full bg-series-2" />Ready to help</p>
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -378,7 +273,7 @@ function ExecutiveSummary() {
                   <MessageContent className={message.role === "user" ? "max-w-[92%] rounded-md bg-primary px-3.5 py-2.5 text-primary-foreground" : "max-w-full px-0 py-0"}>
                     <MessageResponse>{message.text}</MessageResponse>
                   </MessageContent>
-                  {message.role === "assistant" && <QuestionSuggestions questions={resolveSuggestionsFor(message.text)} onQuestion={sendQuestion} compact />}
+                  {message.role === "assistant" && <QuestionSuggestions questions={message.suggestions ?? starterQuestions.slice(0, 3)} onQuestion={sendQuestion} compact />}
                 </Message>
               ))}
             </ConversationContent>
@@ -419,9 +314,47 @@ function ExecutiveSummary() {
   );
 }
 
-function resolveSuggestionsFor(response: string) {
-  const matching = Object.values(dashboardAnswers).find((answer) => answer.response === response);
-  return matching?.suggestions ?? starterQuestions.slice(0, 3);
+function ProfileSwitcher({ activeId, onSwitch }: { activeId: string; onSwitch: (id: string) => void }) {
+  const active = profiles.find((item) => item.id === activeId) ?? profiles[0]!;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Signed in as ${active.name}. Switch profile`}
+          className="flex items-center gap-2.5 rounded-md py-1 pl-1 pr-2 text-left transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:border-l sm:border-border sm:pl-3"
+        >
+          <span className="grid size-8 place-items-center rounded-full bg-secondary text-lg" aria-hidden="true">
+            {active.avatar}
+          </span>
+          <span className="text-xs leading-[1.3]">
+            <span className="block font-bold">Welcome back,</span>
+            <span>{active.name}</span>
+          </span>
+          <ChevronDown size={14} className="text-muted-foreground" aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuLabel className="text-[11px] font-semibold uppercase text-muted-foreground">
+          Switch profile (demo)
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {profiles.map((item) => (
+          <DropdownMenuItem key={item.id} onSelect={() => onSwitch(item.id)} className="items-start gap-2.5 py-2">
+            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-secondary text-base" aria-hidden="true">
+              {item.avatar}
+            </span>
+            <span className="min-w-0 flex-1 text-xs leading-snug">
+              <span className="block font-semibold">{item.name}</span>
+              <span className="block text-muted-foreground">{item.role}</span>
+              <span className="block text-[11px] text-muted-foreground">Access: {accessSummary(item.panels)}</span>
+            </span>
+            {item.id === active.id && <Check size={14} className="mt-0.5 text-primary" aria-label="Current profile" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 function AssistantMessage({ text }: { text: string }) {
@@ -482,102 +415,5 @@ function FilterSelect({
         </SelectContent>
       </Select>
     </label>
-  );
-}
-
-function KpiCard({
-  title,
-  Icon,
-  metrics,
-}: {
-  title: string;
-  Icon: typeof ClipboardList;
-  metrics: { product: string; current: string; prior: string; change: string; direction: "up" | "down" }[];
-}) {
-  return (
-    <section className="dashboard-panel flex min-h-[114px] items-center gap-3 px-4 py-3 sm:gap-4 sm:px-5">
-      <div className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary text-primary">
-        <Icon size={21} strokeWidth={2.1} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <h2 className="mb-2 text-sm font-bold text-primary">{title}</h2>
-        <div className="grid grid-cols-2 divide-x divide-border">
-          {metrics.map((metric) => {
-            const UpIcon = metric.direction === "up" ? ArrowUpRight : ArrowDownRight;
-            return (
-              <div key={metric.product} className="min-w-0 px-3 first:pl-0 last:pr-0 sm:px-4">
-                <p className="truncate text-xs text-muted-foreground">{metric.product}</p>
-                <p className="mt-1 text-sm font-semibold tabular-nums">{metric.current}</p>
-                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] tabular-nums">
-                  <span>{metric.prior}</span>
-                  <span className={`inline-flex items-center gap-0.5 whitespace-nowrap font-medium ${metric.direction === "up" ? "text-trend-up" : "text-trend-down"}`}>
-                    {metric.change}<UpIcon size={12} strokeWidth={2.7} />
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function DashboardPanel({
-  title,
-  className,
-  centeredTitle = false,
-  children,
-}: {
-  title: string;
-  className: string;
-  centeredTitle?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className={`dashboard-panel p-3 sm:p-3.5 ${className}`}>
-      <h2 className={`mb-1.5 text-sm font-bold leading-snug text-primary ${centeredTitle ? "text-center" : ""}`}>{title}</h2>
-      {children}
-    </section>
-  );
-}
-
-function ChartLegend({
-  items,
-}: {
-  items: { label: string; className: string }[];
-}) {
-  return (
-    <div className="flex min-h-4 flex-wrap items-center justify-center gap-x-2.5 gap-y-1 text-[10px] text-muted-foreground">
-      {items.map((item) => (
-        <span key={item.label} className="inline-flex items-center gap-1">
-          <span className={`size-2 rounded-full ${item.className}`} />{item.label}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function EngagementPie({
-  values,
-  product,
-  colors,
-}: {
-  values: { name: string; value: number }[];
-  product: string;
-  colors: string[];
-}) {
-  return (
-    <div className="relative min-h-0">
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart margin={{ top: 14, right: 22, bottom: 18, left: 22 }}>
-          <Tooltip formatter={(value) => `${value}%`} />
-          <Pie data={values} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius="67%" labelLine={{ stroke: "var(--color-muted-foreground)", strokeWidth: 0.8 }} label={({ name, value }) => `${name} ${value}%`}>
-            {values.map((entry, index) => <Cell key={entry.name} fill={colors[index % colors.length]} stroke="var(--color-card)" strokeWidth={1} />)}
-          </Pie>
-        </PieChart>
-      </ResponsiveContainer>
-      <p className="absolute inset-x-0 bottom-0 text-center text-xs font-bold text-primary">{product}</p>
-    </div>
   );
 }
