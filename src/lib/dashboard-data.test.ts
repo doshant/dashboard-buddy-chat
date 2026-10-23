@@ -13,7 +13,7 @@ import {
   sum,
 } from "@/lib/dashboard-data";
 
-describe("Ulefnersen launch reference data", () => {
+describe("Launch reference data", () => {
   it("keeps patient volumes between 20 and 80", () => {
     expect(kpis.activePatients.total).toBeGreaterThanOrEqual(20);
     expect(kpis.activePatients.total).toBeLessThanOrEqual(80);

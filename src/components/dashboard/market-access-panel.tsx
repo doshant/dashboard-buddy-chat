@@ -268,7 +268,7 @@ export function MarketAccessPanel() {
         >
           <div className="dashboard-chart h-[220px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={timeToTherapy} margin={{ top: 16, right: 16, bottom: 2, left: -20 }}>
+              <LineChart data={timeToTherapy} margin={{ top: 20, right: 16, bottom: 2, left: -20 }}>
                 <CartesianGrid
                   vertical={false}
                   stroke="var(--color-border)"

@@ -187,7 +187,7 @@ export function MarketingPanel() {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
                 data={engagementByMonth}
-                margin={{ top: 18, right: 16, bottom: 2, left: -20 }}
+                margin={{ top: 22, right: 16, bottom: 2, left: -20 }}
               >
                 <CartesianGrid
                   vertical={false}

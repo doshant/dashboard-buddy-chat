@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import {
   axisTick,
+  categoryTick,
   seriesSwatch,
   surfaceGap,
   tooltipProps,
@@ -127,7 +128,7 @@ export function StackedMonthlyBars({
     <>
       <div className="dashboard-chart h-[220px]">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 16, right: 8, bottom: 2, left: -12 }}>
+          <BarChart data={data} margin={{ top: 20, right: 8, bottom: 2, left: -12 }}>
             <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 4" />
             <XAxis dataKey="month" tickLine={false} axisLine={false} tick={axisTick} />
             <YAxis
@@ -193,7 +194,7 @@ export function StackedCategoryBars({
           <BarChart
             data={data}
             layout="vertical"
-            margin={{ top: 4, right: 30, bottom: 4, left: 4 }}
+            margin={{ top: 4, right: 38, bottom: 4, left: 4 }}
           >
             <CartesianGrid horizontal={false} stroke="var(--color-border)" strokeDasharray="3 4" />
             <XAxis
@@ -210,7 +211,7 @@ export function StackedCategoryBars({
               tickLine={false}
               axisLine={false}
               width={categoryWidth}
-              tick={{ ...axisTick, fontSize: 10 }}
+              tick={categoryTick}
             />
             <Tooltip {...tooltipProps} formatter={(value) => formatValue(Number(value))} />
             {series.map((item, index) => {
@@ -271,7 +272,7 @@ export function RankedBars({
   return (
     <div className="dashboard-chart" style={{ height: Math.max(110, rows.length * 34 + 12) }}>
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={rows} layout="vertical" margin={{ top: 2, right: 64, bottom: 2, left: 4 }}>
+        <BarChart data={rows} layout="vertical" margin={{ top: 2, right: 76, bottom: 2, left: 4 }}>
           <XAxis type="number" hide domain={[0, "dataMax"]} />
           <YAxis
             type="category"
@@ -279,7 +280,7 @@ export function RankedBars({
             tickLine={false}
             axisLine={false}
             width={categoryWidth}
-            tick={{ ...axisTick, fontSize: 10 }}
+            tick={categoryTick}
           />
           <Tooltip {...tooltipProps} formatter={(value) => [formatValue(Number(value)), unit]} />
           <Bar

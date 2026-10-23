@@ -1,10 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type ComponentType, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   Activity,
   Bot,
   Check,
   ChevronDown,
+  Download,
+  FileSpreadsheet,
+  FileText,
   Hospital,
   Info,
   LayoutDashboard,
@@ -12,7 +23,6 @@ import {
   MapPinned,
   Megaphone,
   MessageCircle,
-  PackageCheck,
   RotateCcw,
   Send,
   ShieldCheck,
@@ -55,7 +65,6 @@ import {
 } from "@/components/ui/select";
 import {
   accessSummary,
-  brand,
   dataThrough,
   filters,
   profiles,
@@ -63,21 +72,22 @@ import {
   starterQuestionsFor,
   type PanelLabel,
 } from "@/lib/dashboard-data";
+import { downloadCsv, downloadXlsx, exportFileName, tablesFromMarkdown } from "@/lib/table-export";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Ulefnersen Launch Tracker | AUXO Analytics" },
+      { title: "Launch Tracker | AUXO Analytics" },
       {
         name: "description",
         content:
-          "Track the Ulefnersen launch: patient funnel, ex-factory vials and net sales, forecast attainment, market access, payer mix, and channel inventory.",
+          "Track the launch: patient funnel, ex-factory vials and net sales, forecast attainment, market access, payer mix, and channel inventory.",
       },
-      { property: "og:title", content: "Ulefnersen Launch Tracker | AUXO Analytics" },
+      { property: "og:title", content: "Launch Tracker | AUXO Analytics" },
       {
         property: "og:description",
         content:
-          "An interactive launch tracking demo for Ulefnersen patients, vials, net sales, and market access.",
+          "An interactive launch tracking demo for patients, vials, net sales, and market access.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -86,15 +96,38 @@ export const Route = createFileRoute("/")({
   component: LaunchTracker,
 });
 
-type ChatMessage = { id: number; role: "user" | "assistant"; text: string; suggestions?: string[] };
+type ChatMessage = {
+  id: number;
+  role: "user" | "assistant";
+  text: string;
+  title?: string;
+  suggestions?: string[];
+};
+
+// The assistant can be dragged wider from its left edge; it reopens at the default width.
+const chatWidthDefault = 520;
+const chatWidthMin = 380;
+const chatWidthMax = 960;
+
+// Preset replies are "thought about" briefly, then typed out a word at a time.
+const replyThinkingMs = 2000;
+const replyWordMs = 28;
+
+function wordEnds(text: string) {
+  return Array.from(text.matchAll(/\S+\s*/g), (match) => match.index + match[0].length);
+}
+
+function clampChatWidth(width: number) {
+  const viewportMax = typeof window === "undefined" ? chatWidthMax : window.innerWidth - 48;
+  return Math.round(Math.max(chatWidthMin, Math.min(width, chatWidthMax, viewportMax)));
+}
 
 const panels: { label: PanelLabel; icon: typeof LayoutDashboard; Content?: ComponentType }[] = [
   { label: "Overview", icon: LayoutDashboard, Content: OverviewPanel },
   { label: "Market Access", icon: ShieldCheck, Content: MarketAccessPanel },
+  { label: "Marketing", icon: Megaphone, Content: MarketingPanel },
   { label: "Site of Care", icon: Hospital },
   { label: "Field Activity", icon: MapPinned },
-  { label: "Enrollment & Dispense Mix", icon: PackageCheck },
-  { label: "Marketing", icon: Megaphone, Content: MarketingPanel },
 ];
 
 function LaunchTracker() {
@@ -105,7 +138,45 @@ function LaunchTracker() {
   const [activePanel, setActivePanel] = useState<PanelLabel>("Overview");
   const [chatOpen, setChatOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatWidth, setChatWidth] = useState(chatWidthDefault);
+  // The assistant message being revealed: 0 characters shown means it is still "thinking".
+  const [reply, setReply] = useState<{ id: number; shown: number } | null>(null);
+  const replyTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => () => clearTimeout(replyTimer.current), []);
+
+  function resizeChat(width: number) {
+    setChatWidth(clampChatWidth(width));
+  }
+
+  function closeChat() {
+    setChatOpen(false);
+    setChatWidth(chatWidthDefault);
+  }
+
+  function startChatResize(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = chatWidth;
+    const onMove = (move: PointerEvent) => resizeChat(startWidth + startX - move.clientX);
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      document.body.style.removeProperty("cursor");
+      document.body.style.removeProperty("user-select");
+    };
+    document.body.style.cursor = "ew-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+  }
+
+  function handleChatResizeKey(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key === "ArrowLeft") resizeChat(chatWidth + 40);
+    else if (event.key === "ArrowRight") resizeChat(chatWidth - 40);
+    else return;
+    event.preventDefault();
+  }
 
   useEffect(() => {
     if (!chatOpen) return;
@@ -124,17 +195,42 @@ function LaunchTracker() {
     if (!next || next.id === profile.id) return;
     setProfileId(next.id);
     // The transcript may quote data the next profile can't see, so it doesn't carry over.
-    setMessages([]);
+    clearChat();
     if (!next.panels.includes(panel.label)) setActivePanel(next.panels[0] ?? "Overview");
   }
 
+  // Ends any reply in progress, leaving its full text visible.
+  function finishReply() {
+    clearTimeout(replyTimer.current);
+    setReply(null);
+  }
+
+  function clearChat() {
+    finishReply();
+    setMessages([]);
+  }
+
+  function typeReply(id: number, ends: number[], step: number) {
+    if (step >= ends.length) {
+      setReply(null);
+      return;
+    }
+    setReply({ id, shown: ends[step]! });
+    replyTimer.current = setTimeout(() => typeReply(id, ends, step + 1), replyWordMs);
+  }
+
   function sendQuestion(question: string) {
+    finishReply();
     const answer = resolveDashboardAnswer(question, profile.panels);
+    const id = Date.now();
     setMessages((current) => [
       ...current,
-      { id: Date.now(), role: "user", text: question },
-      { id: Date.now() + 1, role: "assistant", text: answer.response, suggestions: answer.suggestions },
+      { id, role: "user", text: question },
+      { id: id + 1, role: "assistant", text: answer.response, title: answer.title, suggestions: answer.suggestions },
     ]);
+    setReply({ id: id + 1, shown: 0 });
+    const ends = wordEnds(answer.response);
+    replyTimer.current = setTimeout(() => typeReply(id + 1, ends, 0), replyThinkingMs);
   }
 
   function handlePromptSubmit(
@@ -156,7 +252,7 @@ function LaunchTracker() {
             </div>
             <div className="min-w-0">
               <p className="truncate text-[11px] font-semibold uppercase text-muted-foreground">
-                AUXO / {brand} launch tracker · Data through {dataThrough}
+                AUXO launch tracker · Data through {dataThrough}
               </p>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <h1 className="text-[23px] font-bold leading-tight text-primary sm:text-[26px]">
@@ -199,7 +295,7 @@ function LaunchTracker() {
               </div>
             </div>
             <ProfileSwitcher activeId={profile.id} onSwitch={switchProfile} />
-            <Button variant="ghost" size="icon" aria-label="About this dashboard" title="About this dashboard" className="hidden text-sky-700 sm:inline-flex">
+            <Button variant="ghost" size="icon" aria-label="About this dashboard" title="About this dashboard" className="hidden text-brand-bright-blue sm:inline-flex">
               <Info size={20} />
             </Button>
           </div>
@@ -244,7 +340,21 @@ function LaunchTracker() {
       </nav>
 
       {chatOpen ? (
-        <aside aria-label="Dashboard Assistant" className="fixed bottom-[74px] right-3 z-40 flex h-[min(690px,calc(100dvh-96px))] w-[min(420px,calc(100vw-24px))] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl sm:bottom-6 sm:right-6">
+        <aside aria-label="Dashboard Assistant" style={{ width: `min(${chatWidth}px, calc(100vw - 24px))` }} className="fixed bottom-[74px] right-3 z-40 flex h-[min(690px,calc(100dvh-96px))] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl sm:bottom-6 sm:right-6">
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize assistant"
+            aria-valuenow={chatWidth}
+            aria-valuemin={chatWidthMin}
+            aria-valuemax={chatWidthMax}
+            title="Drag to resize · double-click to reset"
+            tabIndex={0}
+            onPointerDown={startChatResize}
+            onDoubleClick={() => resizeChat(chatWidthDefault)}
+            onKeyDown={handleChatResizeKey}
+            className="absolute inset-y-0 left-0 z-10 hidden w-1.5 cursor-ew-resize transition-colors hover:bg-primary/30 focus-visible:bg-primary/30 focus-visible:outline-none sm:block"
+          />
           <header className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3.5">
             <div className="flex items-center gap-3">
               <div className="grid size-9 place-items-center rounded-md bg-primary text-primary-foreground">
@@ -256,10 +366,10 @@ function LaunchTracker() {
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" aria-label="Clear conversation" title="Clear conversation" onClick={() => { setMessages([]); textareaRef.current?.focus(); }}>
+              <Button variant="ghost" size="icon" aria-label="Clear conversation" title="Clear conversation" onClick={() => { clearChat(); textareaRef.current?.focus(); }}>
                 <RotateCcw size={16} />
               </Button>
-              <Button variant="ghost" size="icon" aria-label="Close chat" title="Close chat" onClick={() => setChatOpen(false)}>
+              <Button variant="ghost" size="icon" aria-label="Close chat" title="Close chat" onClick={closeChat}>
                 <X size={17} />
               </Button>
             </div>
@@ -268,14 +378,24 @@ function LaunchTracker() {
           <Conversation className="chat-transcript min-h-0 flex-1">
             <ConversationContent className="gap-5 px-4 py-4">
               <AssistantMessage text={"Hi! I'm your Dashboard Assistant. What would you like to know?"} />
-              {messages.map((message) => (
-                <Message key={message.id} from={message.role} className="max-w-full gap-1.5">
-                  <MessageContent className={message.role === "user" ? "max-w-[92%] rounded-md bg-primary px-3.5 py-2.5 text-primary-foreground" : "max-w-full px-0 py-0"}>
-                    <MessageResponse>{message.text}</MessageResponse>
-                  </MessageContent>
-                  {message.role === "assistant" && <QuestionSuggestions questions={message.suggestions ?? starterQuestions.slice(0, 3)} onQuestion={sendQuestion} compact />}
-                </Message>
-              ))}
+              {messages.map((message) => {
+                const revealing = reply?.id === message.id ? reply : null;
+                return (
+                  <Message key={message.id} from={message.role} className="max-w-full gap-1.5">
+                    <MessageContent className={message.role === "user" ? "max-w-[92%] rounded-md bg-primary px-3.5 py-2.5 text-primary-foreground" : "max-w-full px-0 py-0"}>
+                      {revealing?.shown === 0 ? (
+                        <TypingDots />
+                      ) : (
+                        <MessageResponse controls={{ table: false }} isAnimating={Boolean(revealing)}>
+                          {revealing ? message.text.slice(0, revealing.shown) : message.text}
+                        </MessageResponse>
+                      )}
+                    </MessageContent>
+                    {message.role === "assistant" && !revealing && <ReplyDownload text={message.text} title={message.title ?? ""} />}
+                    {message.role === "assistant" && !revealing && <QuestionSuggestions questions={message.suggestions ?? starterQuestions.slice(0, 3)} onQuestion={sendQuestion} compact />}
+                  </Message>
+                );
+              })}
             </ConversationContent>
           </Conversation>
 
@@ -364,6 +484,50 @@ function AssistantMessage({ text }: { text: string }) {
         <MessageResponse>{text}</MessageResponse>
       </MessageContent>
     </Message>
+  );
+}
+
+function ReplyDownload({ text, title }: { text: string; title: string }) {
+  const tables = tablesFromMarkdown(text);
+  if (!tables.length) return null;
+  const fileName = exportFileName(title);
+  const label = tables.length > 1 ? `Download ${tables.length} tables` : "Download table";
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="flex w-fit items-center gap-1.5 rounded-md px-1.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Download size={13} />
+          {label}
+          <ChevronDown size={12} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-52">
+        <DropdownMenuItem onSelect={() => void downloadXlsx(tables, fileName)}>
+          <FileSpreadsheet size={15} className="text-series-2" />
+          Excel (.xlsx)
+          {tables.length > 1 && <span className="ml-auto text-[10px] text-muted-foreground">1 sheet each</span>}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => downloadCsv(tables, fileName)}>
+          <FileText size={15} className="text-muted-foreground" />
+          CSV (.csv)
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function TypingDots() {
+  return (
+    <div className="typing-dots" role="status" aria-label="Assistant is typing">
+      <span />
+      <span />
+      <span />
+      <span />
+    </div>
   );
 }
 

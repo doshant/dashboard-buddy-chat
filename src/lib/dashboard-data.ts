@@ -1,5 +1,3 @@
-export const brand = "Ulefnersen";
-
 export const filters = {
   geographyLevels: ["Nation", "Region", "Territory"],
   geographyNames: ["Nation", "East", "West", "Central"],
@@ -215,10 +213,9 @@ export const kpis = {
 export const panelLabels = [
   "Overview",
   "Market Access",
+  "Marketing",
   "Site of Care",
   "Field Activity",
-  "Enrollment & Dispense Mix",
-  "Marketing",
 ] as const;
 
 export type PanelLabel = (typeof panelLabels)[number];
@@ -234,7 +231,8 @@ export function accessSummary(panels: readonly PanelLabel[]) {
   return panels.length === panelLabels.length ? "All tabs" : `${panels.join(", ")} only`;
 }
 
-type DashboardAnswer = { response: string; suggestions: string[] };
+// `title` names what the reply's tables show; downloads are saved under it.
+type DashboardAnswer = { title: string; response: string; suggestions: string[] };
 
 const starterQuestionsByPanel: Partial<Record<PanelLabel, string[]>> = {
   Overview: [
@@ -264,10 +262,23 @@ export function starterQuestionsFor(panel: string) {
   return starterQuestionsByPanel[panel as PanelLabel] ?? starterQuestionsByPanel.Overview ?? [];
 }
 
+// Replies render as markdown in the chat: a headline sentence, then a compact table.
+const lines = (...rows: string[]) => rows.join("\n");
+
 export const dashboardAnswers = {
   forecast: {
-    response:
-      "Ulefnersen net sales are $24.5M launch to date, 94% of the $26.0M launch forecast, after a slow Q1. Q3 QTD is ahead at $11.9M vs $11.7M (102%), and September alone hit $4.4M vs $4.2M (106%). Vials are 219 launch to date: 94% of the 232 original budget and 101% of the 217 LE.",
+    title: "Net sales and vials vs forecast",
+    response: lines(
+      "**Net sales are $24.5M launch to date, 94% of forecast**, after a slow Q1. Q3 is running ahead.",
+      "",
+      "| Metric | Actual | Target | Attainment |",
+      "| --- | ---: | ---: | ---: |",
+      "| Net sales, launch to date | $24.5M | $26.0M | 94% |",
+      "| Net sales, Q3 QTD | $11.9M | $11.7M | 102% |",
+      "| Net sales, September | $4.4M | $4.2M | 106% |",
+      "| Vials vs original budget | 219 | 232 | 94% |",
+      "| Vials vs LE | 219 | 217 | 101% |",
+    ),
     suggestions: [
       "How many patients are active right now?",
       "Why are patients still pending?",
@@ -275,8 +286,22 @@ export const dashboardAnswers = {
     ],
   },
   active: {
-    response:
-      "62 patients are active (dosed in the last 16 weeks), up 15% from 54 in August. 44 are commercial (paid) and 18 are on free programs: 7 Quick Start, 5 Bridge and 6 PAP. 11 are still in loading (doses 1–2) and 51 are in maintenance (dose 3+).",
+    title: "Active patients",
+    response: lines(
+      "**62 patients are active** (dosed in the last 16 weeks), up 15% from 54 in August.",
+      "",
+      "| Payment | Patients |",
+      "| --- | ---: |",
+      "| Commercial (paid) | 44 |",
+      "| Quick Start (free) | 7 |",
+      "| Bridge (free) | 5 |",
+      "| PAP (free) | 6 |",
+      "",
+      "| Therapy phase | Patients |",
+      "| --- | ---: |",
+      "| Loading (doses 1–2) | 11 |",
+      "| Maintenance (dose 3+) | 51 |",
+    ),
     suggestions: [
       "How many new prescribers did we add?",
       "How are we tracking against forecast?",
@@ -284,8 +309,19 @@ export const dashboardAnswers = {
     ],
   },
   pending: {
-    response:
-      "9 patients are referred but not yet dosed, pending an average of 22 days. LP scheduling holds the most (4) and the oldest: 2 of those have waited over 30 days. Prior authorization has 3 and benefits verification 2. 3 patients in total are past 30 days.",
+    title: "Pending patients",
+    response: lines(
+      "**9 patients are referred but not yet dosed**, pending an average of 22 days.",
+      "",
+      "| Stage | Patients |",
+      "| --- | ---: |",
+      "| LP scheduling | 4 |",
+      "| Prior authorization | 3 |",
+      "| Benefits verification | 2 |",
+      "| **Total pending** | **9** |",
+      "",
+      "3 patients have waited over 30 days, 2 of them at LP scheduling.",
+    ),
     suggestions: [
       "How many patients are active right now?",
       "How are we tracking against forecast?",
@@ -293,8 +329,16 @@ export const dashboardAnswers = {
     ],
   },
   prescribers: {
-    response:
-      "6 HCPs ordered Ulefnersen for the first time in September, the most since February, out of 25 ordering prescribers that month. 38 HCPs have prescribed since launch.",
+    title: "Prescribers",
+    response: lines(
+      "**38 HCPs have prescribed since launch**, and September added the most new prescribers since February.",
+      "",
+      "| Prescribers | HCPs |",
+      "| --- | ---: |",
+      "| New in September | 6 |",
+      "| Ordering in September | 25 |",
+      "| Since launch | 38 |",
+    ),
     suggestions: [
       "Why are patients still pending?",
       "How many patients are active right now?",
@@ -302,8 +346,18 @@ export const dashboardAnswers = {
     ],
   },
   summary: {
-    response:
-      "Launch to date, Ulefnersen has $24.5M net sales (94% of forecast) with Q3 running ahead at 102%. 62 patients are active (44 paid, 18 free) and 9 started in September, all new to brand now that EAP transitions are complete. 9 patients are pending, mostly at LP scheduling, and 38 HCPs have prescribed since launch.",
+    title: "Launch summary",
+    response: lines(
+      "**Sales are close to forecast and Q3 is running ahead.** Key numbers launch to date:",
+      "",
+      "| Area | Status |",
+      "| --- | --- |",
+      "| Net sales | $24.5M, 94% of forecast (Q3 at 102%) |",
+      "| Active patients | 62 (44 paid, 18 free) |",
+      "| New starts, September | 9, all new to brand |",
+      "| Pending patients | 9, mostly at LP scheduling |",
+      "| Prescribers | 38 HCPs since launch |",
+    ),
     suggestions: [
       "How are we tracking against forecast?",
       "Why are patients still pending?",
@@ -311,8 +365,23 @@ export const dashboardAnswers = {
     ],
   },
   priorAuth: {
-    response:
-      "77 patients have had a PA submitted and 73 were approved: a 95% approval rate. 3 are still awaiting a decision and 1 was denied. First PA approval takes a median of 15 days from referral (mean 18), down from 21 days for January referrals to 11 for August.",
+    title: "Prior authorization",
+    response: lines(
+      "**95% of decided PAs have been approved**, and approvals are getting faster.",
+      "",
+      "| PA status | Patients |",
+      "| --- | ---: |",
+      "| Submitted | 77 |",
+      "| Approved | 73 |",
+      "| Awaiting decision | 3 |",
+      "| Denied | 1 |",
+      "",
+      "| Days from referral to first PA approval | Days |",
+      "| --- | ---: |",
+      "| Median (mean 18) | 15 |",
+      "| January referrals | 21 |",
+      "| August referrals | 11 |",
+    ),
     suggestions: [
       "How long does it take to get to first dose?",
       "What does the payer mix look like?",
@@ -320,8 +389,20 @@ export const dashboardAnswers = {
     ],
   },
   timeToDose: {
-    response:
-      "Non-EAP patients reach their first intrathecal dose a median of 29 days after referral (mean 34, across 50 new-to-brand starts). That has fallen from 40 days for January referrals to 23 for August. Of 80 referrals, 69 have started therapy: 86% overall, or 97% of the 71 with a known outcome.",
+    title: "Time to first dose",
+    response: lines(
+      "**Non-EAP patients reach their first intrathecal dose a median of 29 days after referral** (mean 34, across 50 new-to-brand starts).",
+      "",
+      "| Referral month | Days to first dose |",
+      "| --- | ---: |",
+      "| January | 40 |",
+      "| August | 23 |",
+      "",
+      "| Referral outcome | Patients | Share |",
+      "| --- | ---: | ---: |",
+      "| Started therapy, of all 80 referrals | 69 | 86% |",
+      "| Started therapy, of 71 with a known outcome | 69 | 97% |",
+    ),
     suggestions: [
       "What is our PA approval rate?",
       "What does the payer mix look like?",
@@ -329,8 +410,22 @@ export const dashboardAnswers = {
     ],
   },
   payerMix: {
-    response:
-      "Of the 80 referred patients, Medicare is the largest group (22 FFS, 14 Medicare Advantage), followed by 24 commercial, 9 Medicaid / CHIP, 6 free-drug and 5 unmapped. Of the 143 paid doses, Medicare FFS covers 52, commercial 47, Medicare Advantage 31 and Medicaid / CHIP 13. Patients pay an average of $295 per dose after foundation and copay support.",
+    title: "Payer mix",
+    response: lines(
+      "**Medicare is the largest payer** across 80 referred patients and 143 paid doses.",
+      "",
+      "| Payer | Referred patients | Paid doses |",
+      "| --- | ---: | ---: |",
+      "| Medicare FFS | 22 | 52 |",
+      "| Medicare Advantage | 14 | 31 |",
+      "| Commercial | 24 | 47 |",
+      "| Medicaid / CHIP | 9 | 13 |",
+      "| Free drug | 6 | – |",
+      "| Unmapped | 5 | – |",
+      "| **Total** | **80** | **143** |",
+      "",
+      "Patients pay an average of $295 per dose after foundation and copay support.",
+    ),
     suggestions: [
       "What is our PA approval rate?",
       "Why are patients stopping therapy?",
@@ -338,8 +433,20 @@ export const dashboardAnswers = {
     ],
   },
   stops: {
-    response:
-      "11 patients have stopped or never started. 2 referrals were cancelled before a first dose (1 death, 1 access denial), and 9 patients discontinued after dosing: 3 deaths, 2 ventilation, 2 hospice and 2 access denials. Both access-denial discontinuations later restarted, so 7 patients are off therapy and 62 remain active.",
+    title: "Discontinuations",
+    response: lines(
+      "**11 patients have stopped or never started.**",
+      "",
+      "| Reason | Before first dose | After dosing |",
+      "| --- | ---: | ---: |",
+      "| Death | 1 | 3 |",
+      "| Access denial | 1 | 2 |",
+      "| Ventilation | – | 2 |",
+      "| Hospice | – | 2 |",
+      "| **Total** | **2** | **9** |",
+      "",
+      "Both access-denial discontinuations later restarted, so 7 patients are off therapy and 62 remain active.",
+    ),
     suggestions: [
       "What is our PA approval rate?",
       "What does the payer mix look like?",
@@ -347,8 +454,18 @@ export const dashboardAnswers = {
     ],
   },
   inventory: {
-    response:
-      "23 vials are in the channel: 9 at the specialty distributor and 14 across treating sites (17 paid, 6 free). That equals the 219 vials shipped less the 196 administered, and covers about 0.8 months at the last three months' average of 29 doses.",
+    title: "Channel inventory",
+    response: lines(
+      "**23 vials are in the channel**, about 0.8 months of supply at the recent average of 29 doses a month.",
+      "",
+      "| Location | Vials |",
+      "| --- | ---: |",
+      "| Specialty distributor | 9 |",
+      "| Treating sites | 14 |",
+      "| **Total** (17 paid, 6 free) | **23** |",
+      "",
+      "This equals the 219 vials shipped less the 196 administered.",
+    ),
     suggestions: [
       "What is our PA approval rate?",
       "Why are patients stopping therapy?",
@@ -356,8 +473,19 @@ export const dashboardAnswers = {
     ],
   },
   mediaChannels: {
-    response:
-      "Paid media has delivered 17.4M impressions since launch, growing from 1.5M in M1 to 2.4M in M9. Display ads lead with 6.3M (36%), followed by social media 4.5M (26%), pre-roll video 4.0M (23%), paid search 1.9M (11%) and other 0.8M (4%).",
+    title: "Paid media by channel",
+    response: lines(
+      "**Paid media has delivered 17.4M impressions since launch**, growing from 1.5M in M1 to 2.4M in M9.",
+      "",
+      "| Channel | Impressions | Share |",
+      "| --- | ---: | ---: |",
+      "| Display ads | 6.3M | 36% |",
+      "| Social media | 4.5M | 26% |",
+      "| Pre-roll video | 4.0M | 23% |",
+      "| Paid search | 1.9M | 11% |",
+      "| Other | 0.8M | 4% |",
+      "| **Total** | **17.4M** | **100%** |",
+    ),
     suggestions: [
       "What is our ad engagement rate?",
       "Which region is performing best?",
@@ -365,8 +493,17 @@ export const dashboardAnswers = {
     ],
   },
   adEngagement: {
-    response:
-      "The click & video engagement rate is 7.2%: 78.2k ad clicks plus 1.2M video views across 17.4M impressions. It has risen every month, from 6.4% in M1 to 7.9% in M9.",
+    title: "Ad engagement",
+    response: lines(
+      "**The click & video engagement rate is 7.2%**, and it has risen every month, from 6.4% in M1 to 7.9% in M9.",
+      "",
+      "| Metric | Value |",
+      "| --- | ---: |",
+      "| Impressions | 17.4M |",
+      "| Ad clicks | 78.2k |",
+      "| Video views | 1.2M |",
+      "| Engagement rate | 7.2% |",
+    ),
     suggestions: [
       "Which media channels drive the most impressions?",
       "How is website traffic trending?",
@@ -374,8 +511,25 @@ export const dashboardAnswers = {
     ],
   },
   websiteTraffic: {
-    response:
-      "The brand websites have had 142.7k visits since launch: 91.9k on the patient site and 50.8k on the HCP site. Monthly visits grew from 11.5k in M1 to 20.1k in M9 (+75%), up 7% on M8. 6.8k visits completed a high value action, a 4.7% HVA rate, mostly resource downloads.",
+    title: "Website traffic",
+    response: lines(
+      "**The brand websites have had 142.7k visits since launch**; monthly visits are up 7% on M8.",
+      "",
+      "| Site | Visits |",
+      "| --- | ---: |",
+      "| Patient site | 91.9k |",
+      "| HCP site | 50.8k |",
+      "| **Total** | **142.7k** |",
+      "",
+      "| Metric | Value |",
+      "| --- | ---: |",
+      "| Monthly visits, M1 | 11.5k |",
+      "| Monthly visits, M9 | 20.1k (+75%) |",
+      "| Visits with a high value action | 6.8k |",
+      "| HVA rate | 4.7% |",
+      "",
+      "Most high value actions are resource downloads.",
+    ),
     suggestions: [
       "How are our emails performing?",
       "What is our ad engagement rate?",
@@ -383,8 +537,21 @@ export const dashboardAnswers = {
     ],
   },
   emailPerformance: {
-    response:
-      "67.4k emails were delivered (70.0k sent less 2.6k bounces). 19.6k were opened (29.1% open rate) and 2.9k clicked (4.3% click rate), and 550 clicks converted to a high value action. Patient campaigns open better than HCP campaigns: 36.0% vs 26.0%.",
+    title: "Email performance",
+    response: lines(
+      "**67.4k emails were delivered**, with a 29.1% open rate and a 4.3% click rate.",
+      "",
+      "| Step | Emails | Rate |",
+      "| --- | ---: | ---: |",
+      "| Sent | 70.0k | |",
+      "| Bounced | 2.6k | |",
+      "| Delivered | 67.4k | |",
+      "| Opened | 19.6k | 29.1% |",
+      "| Clicked | 2.9k | 4.3% |",
+      "| Converted to a high value action | 550 | |",
+      "",
+      "Patient campaigns open better than HCP campaigns: 36.0% vs 26.0%.",
+    ),
     suggestions: [
       "How is website traffic trending?",
       "Which region is performing best?",
@@ -392,8 +559,18 @@ export const dashboardAnswers = {
     ],
   },
   regionalMarketing: {
-    response:
-      "Northeast leads on most measures: 5.1M impressions, 7.3% engagement, a 4.8% HVA rate and a 29.8% email open rate. Midwest is smallest at 3.5M impressions and trails on HVA rate (4.6%) and open rate (28.2%). The four regions add up to the national totals on every measure.",
+    title: "Marketing by region",
+    response: lines(
+      "**Northeast leads on most measures**, with 7.3% engagement and a 29.8% email open rate. Midwest is smallest and trails on HVA and open rates.",
+      "",
+      "| Region | Impressions | Engagement | HVA rate | Open rate |",
+      "| --- | ---: | ---: | ---: | ---: |",
+      "| Northeast | 5.1M | 7.3% | 4.8% | 29.8% |",
+      "| West | 4.5M | 7.3% | 4.8% | 29.6% |",
+      "| Southeast | 4.4M | 7.0% | 4.7% | 28.3% |",
+      "| Midwest | 3.5M | 7.0% | 4.6% | 28.2% |",
+      "| **Total** | **17.4M** | **7.2%** | **4.7%** | **29.1%** |",
+    ),
     suggestions: [
       "Which media channels drive the most impressions?",
       "How are our emails performing?",
@@ -401,6 +578,7 @@ export const dashboardAnswers = {
     ],
   },
   unrecognized: {
+    title: "Dashboard Assistant",
     response: "I'm still learning! Please try one of the suggested questions.",
     suggestions: [
       "How are we tracking against forecast?",
@@ -475,11 +653,16 @@ export function resolveDashboardAnswer(
 
   if (panel !== null && !allowedPanels.includes(panel)) {
     return {
+      title: "Access restricted",
       response: `That question draws on ${panel} data, which isn't part of your access. You can ask about ${allowedPanels.filter((label) => starterQuestionsByPanel[label]).join(", ")}.`,
       suggestions: permittedSuggestions([], allowedPanels),
     };
   }
 
   const answer = dashboardAnswers[topic];
-  return { response: answer.response, suggestions: permittedSuggestions(answer.suggestions, allowedPanels) };
+  return {
+    title: answer.title,
+    response: answer.response,
+    suggestions: permittedSuggestions(answer.suggestions, allowedPanels),
+  };
 }

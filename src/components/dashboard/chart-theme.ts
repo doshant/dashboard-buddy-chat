@@ -1,5 +1,15 @@
-export const axisTick = { fontSize: 9, fill: "var(--color-muted-foreground)" };
-export const valueLabel = { fontSize: 9, fill: "var(--color-foreground)" };
+export const axisTick = { fontSize: 10, fill: "var(--color-muted-foreground)" };
+export const categoryTick = { fontSize: 11, fill: "var(--color-muted-foreground)" };
+// A card-coloured outline drawn behind each value keeps it legible where it crosses grid or trend lines.
+export const valueLabel = {
+  fontSize: 11,
+  fontWeight: 600,
+  fill: "var(--color-foreground)",
+  stroke: "var(--color-card)",
+  strokeWidth: 3,
+  strokeLinejoin: "round" as const,
+  paintOrder: "stroke",
+};
 export const tooltipProps = {
   contentStyle: {
     background: "var(--color-popover)",

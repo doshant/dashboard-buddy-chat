@@ -26,7 +26,13 @@ import {
   StackedMonthlyBars,
   StatCard,
 } from "@/components/dashboard/primitives";
-import { axisTick, surfaceGap, tooltipProps, valueLabel } from "@/components/dashboard/chart-theme";
+import {
+  axisTick,
+  categoryTick,
+  surfaceGap,
+  tooltipProps,
+  valueLabel,
+} from "@/components/dashboard/chart-theme";
 import {
   activeByStatus,
   activePatientsTrend,
@@ -48,15 +54,19 @@ export function OverviewPanel() {
     ...row,
     label: `${row.patients} · ${Math.round((row.patients / funnel.referred) * 100)}%`,
   }));
-  const forecastRows =
+  // `labelAt` is the highest point drawn in each month (bar or trend line), so the bar's value
+  // label can sit above the lines instead of being crossed by them.
+  const forecastRows = (
     forecastMetric === "netSales"
-      ? monthlyNetSales
+      ? monthlyNetSales.map((row) => ({ ...row, le: undefined }))
       : monthlyVials.map((row) => ({
           month: row.month,
           actual: row.total,
           forecast: row.budget,
           le: row.le,
-        }));
+        }))
+  ).map((row) => ({ ...row, labelAt: Math.max(row.actual, row.forecast, row.le ?? 0) }));
+  const vialRows = monthlyVials.map((row) => ({ ...row, labelAt: Math.max(row.total, row.le) }));
   const activeRows = activePatientsTrend.map((row) => ({
     ...row,
     total: row.loading + row.maintenance,
@@ -151,7 +161,7 @@ export function OverviewPanel() {
               <BarChart
                 data={funnelRows}
                 layout="vertical"
-                margin={{ top: 4, right: 58, bottom: 4, left: 4 }}
+                margin={{ top: 4, right: 68, bottom: 4, left: 4 }}
               >
                 <XAxis type="number" hide domain={[0, funnel.referred]} />
                 <YAxis
@@ -160,7 +170,7 @@ export function OverviewPanel() {
                   tickLine={false}
                   axisLine={false}
                   width={108}
-                  tick={{ ...axisTick, fontSize: 10 }}
+                  tick={categoryTick}
                 />
                 <Tooltip
                   {...tooltipProps}
@@ -218,7 +228,7 @@ export function OverviewPanel() {
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart
                   data={forecastRows}
-                  margin={{ top: 16, right: 8, bottom: 2, left: -14 }}
+                  margin={{ top: 22, right: 8, bottom: 2, left: -14 }}
                 >
                   <CartesianGrid
                     vertical={false}
@@ -239,16 +249,7 @@ export function OverviewPanel() {
                     fill="var(--series-1)"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={30}
-                  >
-                    <LabelList
-                      dataKey="actual"
-                      position="top"
-                      formatter={(v: unknown) =>
-                        forecastMetric === "netSales" ? Number(v).toFixed(1) : `${v}`
-                      }
-                      style={valueLabel}
-                    />
-                  </Bar>
+                  />
                   <Line
                     dataKey="forecast"
                     name={forecastMetric === "netSales" ? "Launch forecast" : "Original budget"}
@@ -268,6 +269,26 @@ export function OverviewPanel() {
                       dot={{ r: 3, fill: "var(--series-3)" }}
                     />
                   )}
+                  {/* Invisible line through `labelAt`: carries the bar values, drawn last so they sit on top. */}
+                  <Line
+                    dataKey="labelAt"
+                    stroke="none"
+                    dot={false}
+                    activeDot={false}
+                    legendType="none"
+                    tooltipType="none"
+                    isAnimationActive={false}
+                  >
+                    <LabelList
+                      dataKey="actual"
+                      position="top"
+                      offset={8}
+                      formatter={(v: unknown) =>
+                        forecastMetric === "netSales" ? Number(v).toFixed(1) : `${v}`
+                      }
+                      style={valueLabel}
+                    />
+                  </Line>
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -316,8 +337,8 @@ export function OverviewPanel() {
           <div className="dashboard-chart h-[220px]">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart
-                data={monthlyVials}
-                margin={{ top: 16, right: 8, bottom: 2, left: -20 }}
+                data={vialRows}
+                margin={{ top: 22, right: 8, bottom: 2, left: -20 }}
               >
                 <CartesianGrid
                   vertical={false}
@@ -343,9 +364,7 @@ export function OverviewPanel() {
                   radius={[4, 4, 0, 0]}
                   maxBarSize={26}
                   {...surfaceGap}
-                >
-                  <LabelList dataKey="total" position="top" style={valueLabel} />
-                </Bar>
+                />
                 <Line
                   dataKey="le"
                   name="LE"
@@ -355,6 +374,17 @@ export function OverviewPanel() {
                   strokeDasharray="5 4"
                   dot={false}
                 />
+                <Line
+                  dataKey="labelAt"
+                  stroke="none"
+                  dot={false}
+                  activeDot={false}
+                  legendType="none"
+                  tooltipType="none"
+                  isAnimationActive={false}
+                >
+                  <LabelList dataKey="total" position="top" offset={8} style={valueLabel} />
+                </Line>
               </ComposedChart>
             </ResponsiveContainer>
           </div>
