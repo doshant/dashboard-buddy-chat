@@ -2,6 +2,8 @@
 // same rules produce the national view and any region. `start` limits sums to the selected period;
 // point-in-time measures (active, pending) and the since-launch funnel always run to September.
 
+import type { PeriodWindow } from "@/lib/scope";
+
 export const wacPerVial = 180_000;
 export const assumedGtn = 0.15;
 
@@ -130,7 +132,10 @@ export const nationalLaunchRaw: LaunchRaw = {
 
 const agingTotal = (row: Aging) => row.d0to14 + row.d15to30 + row.d31plus;
 
-export function buildLaunchData(raw: LaunchRaw, start = 0) {
+export function buildLaunchData(
+  raw: LaunchRaw,
+  { start, end }: PeriodWindow = { start: 0, end: undefined },
+) {
   const { funnel, pendingByStep, pendingAvgDays } = raw;
   const allVials = raw.monthlyVials.map((row) => ({ ...row, total: row.paid + row.free }));
   const allNetSales = allVials.map((row) => ({
@@ -138,7 +143,7 @@ export function buildLaunchData(raw: LaunchRaw, start = 0) {
     actual: toNetSalesM(row.paid),
     forecast: row.forecastNetSales,
   }));
-  const inPeriod = <T>(rows: T[]) => rows.slice(start);
+  const inPeriod = <T>(rows: T[]) => rows.slice(start, end);
 
   const monthlyVials = inPeriod(allVials);
   const monthlyNetSales = inPeriod(allNetSales);

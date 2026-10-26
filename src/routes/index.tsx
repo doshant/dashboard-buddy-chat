@@ -31,15 +31,8 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import {
-  Conversation,
-  ConversationContent,
-} from "@/components/ai-elements/conversation";
-import {
-  Message,
-  MessageContent,
-  MessageResponse,
-} from "@/components/ai-elements/message";
+import { Conversation, ConversationContent } from "@/components/ai-elements/conversation";
+import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import {
   PromptInput,
   PromptInputFooter,
@@ -80,7 +73,13 @@ import {
 } from "@/lib/dashboard-data";
 import { attentionSignalsFor } from "@/lib/outlook-data";
 import { buildDashboardData } from "@/lib/scoped-data";
-import type { Geography, TimePeriod } from "@/lib/scope";
+import {
+  latestMonth,
+  monthNames,
+  type Geography,
+  type MonthName,
+  type TimePeriod,
+} from "@/lib/scope";
 import { downloadCsv, downloadXlsx, exportFileName, tablesFromMarkdown } from "@/lib/table-export";
 
 export const Route = createFileRoute("/")({
@@ -160,14 +159,16 @@ function LaunchTracker() {
   const [geographyLevel, setGeographyLevel] = useState<string>("Nation");
   const [geographyName, setGeographyName] = useState<string>("Nation");
   const [timePeriod, setTimePeriod] = useState<string>("Launch to Date");
+  const [month, setMonth] = useState<MonthName>(latestMonth);
   // Figures for the selected geography and period; every tab reads them from context.
   const dashboardData = useMemo(
     () =>
       buildDashboardData({
         geography: geographyName as Geography,
         period: timePeriod as TimePeriod,
+        month,
       }),
-    [geographyName, timePeriod],
+    [geographyName, timePeriod, month],
   );
   const [profileId, setProfileId] = useState(profiles[0]!.id);
   const [activePanel, setActivePanel] = useState<PanelLabel>("Executive Summary");
@@ -221,7 +222,8 @@ function LaunchTracker() {
   const profile = profiles.find((item) => item.id === profileId) ?? profiles[0]!;
   const shownPanels = panels.filter((item) => !item.hidden);
   const visiblePanels = shownPanels.filter((item) => profile.panels.includes(item.label));
-  const panel = visiblePanels.find((item) => item.label === activePanel) ?? visiblePanels[0] ?? panels[0]!;
+  const panel =
+    visiblePanels.find((item) => item.label === activePanel) ?? visiblePanels[0] ?? panels[0]!;
   const PanelIcon = panel.icon;
   const panelFilters = panel.filters ?? { geography: true, period: true };
   const starterQuestions = starterQuestionsFor(panel.label);
@@ -264,17 +266,20 @@ function LaunchTracker() {
     setMessages((current) => [
       ...current,
       { id, role: "user", text: question },
-      { id: id + 1, role: "assistant", text: answer.response, title: answer.title, suggestions: answer.suggestions },
+      {
+        id: id + 1,
+        role: "assistant",
+        text: answer.response,
+        title: answer.title,
+        suggestions: answer.suggestions,
+      },
     ]);
     setReply({ id: id + 1, shown: 0 });
     const ends = wordEnds(answer.response);
     replyTimer.current = setTimeout(() => typeReply(id + 1, ends, 0), replyThinkingMs);
   }
 
-  function handlePromptSubmit(
-    { text }: { text: string },
-    event: FormEvent<HTMLFormElement>,
-  ) {
+  function handlePromptSubmit({ text }: { text: string }, event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const question = text.trim();
     if (question) sendQuestion(question);
@@ -310,7 +315,9 @@ function LaunchTracker() {
               label="Geography Level"
               value={geographyLevel}
               values={filters.geographyLevels}
-              disabledReason={panelFilters.geography ? undefined : `${panel.label} shows national figures only`}
+              disabledReason={
+                panelFilters.geography ? undefined : `${panel.label} shows national figures only`
+              }
               onChange={(level) => {
                 setGeographyLevel(level);
                 setGeographyName(level === "Region" ? filters.regionNames[0] : "Nation");
@@ -321,7 +328,9 @@ function LaunchTracker() {
                 label="Geography Name"
                 value={geographyName}
                 values={filters.regionNames}
-                disabledReason={panelFilters.geography ? undefined : `${panel.label} shows national figures only`}
+                disabledReason={
+                  panelFilters.geography ? undefined : `${panel.label} shows national figures only`
+                }
                 onChange={setGeographyName}
               />
             ) : (
@@ -336,9 +345,24 @@ function LaunchTracker() {
               label="Time Period"
               value={timePeriod}
               values={filters.timePeriods}
-              disabledReason={panelFilters.period ? undefined : `${panel.label} shows launch-to-date figures only`}
+              disabledReason={
+                panelFilters.period ? undefined : `${panel.label} shows launch-to-date figures only`
+              }
               onChange={setTimePeriod}
             />
+            {timePeriod === "Monthly" && (
+              <FilterSelect
+                label="Month"
+                value={month}
+                values={monthNames}
+                disabledReason={
+                  panelFilters.period
+                    ? undefined
+                    : `${panel.label} shows launch-to-date figures only`
+                }
+                onChange={(value) => setMonth(value as MonthName)}
+              />
+            )}
             <div className="ml-1 hidden items-center gap-3 border-l border-border pl-4 sm:flex">
               <span
                 role="img"
@@ -349,7 +373,13 @@ function LaunchTracker() {
               </span>
             </div>
             <ProfileSwitcher activeId={profile.id} onSwitch={switchProfile} />
-            <Button variant="ghost" size="icon" aria-label="About this dashboard" title="About this dashboard" className="hidden text-brand-bright-blue sm:inline-flex">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="About this dashboard"
+              title="About this dashboard"
+              className="hidden text-brand-bright-blue sm:inline-flex"
+            >
               <Info size={20} />
             </Button>
           </div>
@@ -366,13 +396,18 @@ function LaunchTracker() {
             </div>
             <div>
               <h2 className="text-lg font-bold text-primary">{panel.label}</h2>
-              <p className="mt-1 max-w-sm text-sm text-muted-foreground">This section is a placeholder in the demo.</p>
+              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                This section is a placeholder in the demo.
+              </p>
             </div>
           </section>
         )}
       </div>
 
-      <nav aria-label="Dashboard navigation" className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-card/95 px-3 backdrop-blur-md sm:px-6">
+      <nav
+        aria-label="Dashboard navigation"
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-card/95 px-3 backdrop-blur-md sm:px-6"
+      >
         <div className="mx-auto flex h-[64px] max-w-[1800px] items-center gap-1 overflow-x-auto">
           {visiblePanels.map(({ label, icon: Icon, Content }) => (
             <Button
@@ -390,13 +425,18 @@ function LaunchTracker() {
           ))}
           <div className="ml-auto hidden items-center gap-2 pr-2 text-[11px] text-muted-foreground sm:flex">
             <span className="size-2 rounded-full bg-series-2" />
-            Demo data · {profile.name} · {geographyName} · {timePeriod}
+            Demo data · {profile.name} · {geographyName} ·{" "}
+            {timePeriod === "Monthly" ? month : timePeriod}
           </div>
         </div>
       </nav>
 
       {chatOpen ? (
-        <aside aria-label="Dashboard Assistant" style={{ width: `min(${chatWidth}px, calc(100vw - 24px))` }} className="fixed bottom-20 right-3 z-40 flex h-[min(690px,calc(100dvh-100px))] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl sm:right-6">
+        <aside
+          aria-label="Dashboard Assistant"
+          style={{ width: `min(${chatWidth}px, calc(100vw - 24px))` }}
+          className="fixed bottom-20 right-3 z-40 flex h-[min(690px,calc(100dvh-100px))] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl sm:right-6"
+        >
           <div
             role="separator"
             aria-orientation="vertical"
@@ -418,14 +458,32 @@ function LaunchTracker() {
               </div>
               <div>
                 <p className="text-sm font-bold text-primary">Dashboard Assistant</p>
-                <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground"><span className="size-1.5 rounded-full bg-series-2" />Ready to help</p>
+                <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <span className="size-1.5 rounded-full bg-series-2" />
+                  Ready to help
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" aria-label="Clear conversation" title="Clear conversation" onClick={() => { clearChat(); textareaRef.current?.focus(); }}>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Clear conversation"
+                title="Clear conversation"
+                onClick={() => {
+                  clearChat();
+                  textareaRef.current?.focus();
+                }}
+              >
                 <RotateCcw size={16} />
               </Button>
-              <Button variant="ghost" size="icon" aria-label="Close chat" title="Close chat" onClick={closeChat}>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Close chat"
+                title="Close chat"
+                onClick={closeChat}
+              >
                 <X size={17} />
               </Button>
             </div>
@@ -433,22 +491,42 @@ function LaunchTracker() {
 
           <Conversation className="chat-transcript min-h-0 flex-1">
             <ConversationContent className="gap-5 px-4 py-4">
-              <AssistantMessage text={"Hi! I'm your Dashboard Assistant. What would you like to know?"} />
+              <AssistantMessage
+                text={"Hi! I'm your Dashboard Assistant. What would you like to know?"}
+              />
               {messages.map((message) => {
                 const revealing = reply?.id === message.id ? reply : null;
                 return (
                   <Message key={message.id} from={message.role} className="max-w-full gap-1.5">
-                    <MessageContent className={message.role === "user" ? "max-w-[92%] rounded-md bg-primary px-3.5 py-2.5 text-primary-foreground" : "max-w-full px-0 py-0"}>
+                    <MessageContent
+                      className={
+                        message.role === "user"
+                          ? "max-w-[92%] rounded-md bg-primary px-3.5 py-2.5 text-primary-foreground"
+                          : "max-w-full px-0 py-0"
+                      }
+                    >
                       {revealing?.shown === 0 ? (
                         <TypingDots />
                       ) : (
-                        <MessageResponse controls={{ table: false }} components={chatTableComponents} isAnimating={Boolean(revealing)}>
+                        <MessageResponse
+                          controls={{ table: false }}
+                          components={chatTableComponents}
+                          isAnimating={Boolean(revealing)}
+                        >
                           {revealing ? message.text.slice(0, revealing.shown) : message.text}
                         </MessageResponse>
                       )}
                     </MessageContent>
-                    {message.role === "assistant" && !revealing && <ReplyDownload text={message.text} title={message.title ?? ""} />}
-                    {message.role === "assistant" && !revealing && <QuestionSuggestions questions={message.suggestions ?? starterQuestions.slice(0, 3)} onQuestion={sendQuestion} compact />}
+                    {message.role === "assistant" && !revealing && (
+                      <ReplyDownload text={message.text} title={message.title ?? ""} />
+                    )}
+                    {message.role === "assistant" && !revealing && (
+                      <QuestionSuggestions
+                        questions={message.suggestions ?? starterQuestions.slice(0, 3)}
+                        onQuestion={sendQuestion}
+                        compact
+                      />
+                    )}
                   </Message>
                 );
               })}
@@ -470,8 +548,12 @@ function LaunchTracker() {
                         onClick={() => sendQuestion(signal.question)}
                         className="rounded-md border border-watch/30 bg-watch/5 px-2.5 py-2 text-left leading-snug transition-colors hover:bg-watch/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
-                        <span className="block text-[11px] font-medium text-foreground">{signal.question}</span>
-                        <span className="block text-[10px] text-muted-foreground">{signal.reason}</span>
+                        <span className="block text-[11px] font-medium text-foreground">
+                          {signal.question}
+                        </span>
+                        <span className="block text-[10px] text-muted-foreground">
+                          {signal.reason}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -486,10 +568,19 @@ function LaunchTracker() {
 
           <div className="shrink-0 border-t border-border bg-card px-3.5 py-3">
             <PromptInput onSubmit={handlePromptSubmit}>
-              <PromptInputTextarea ref={textareaRef} aria-label="Ask the dashboard assistant" placeholder="Ask about this dashboard…" className="min-h-11 px-3 py-3 text-sm" />
+              <PromptInputTextarea
+                ref={textareaRef}
+                aria-label="Ask the dashboard assistant"
+                placeholder="Ask about this dashboard…"
+                className="min-h-11 px-3 py-3 text-sm"
+              />
               <PromptInputFooter className="justify-between border-t border-border px-2 py-1.5">
-                <span className="text-[10px] text-muted-foreground">Dashboard demo · preset replies</span>
-                <PromptInputSubmit className="size-8 rounded-md" aria-label="Send message"><Send size={15} /></PromptInputSubmit>
+                <span className="text-[10px] text-muted-foreground">
+                  Dashboard demo · preset replies
+                </span>
+                <PromptInputSubmit className="size-8 rounded-md" aria-label="Send message">
+                  <Send size={15} />
+                </PromptInputSubmit>
               </PromptInputFooter>
             </PromptInput>
           </div>
@@ -510,7 +601,13 @@ function LaunchTracker() {
   );
 }
 
-function ProfileSwitcher({ activeId, onSwitch }: { activeId: string; onSwitch: (id: string) => void }) {
+function ProfileSwitcher({
+  activeId,
+  onSwitch,
+}: {
+  activeId: string;
+  onSwitch: (id: string) => void;
+}) {
   const active = profiles.find((item) => item.id === activeId) ?? profiles[0]!;
   return (
     <DropdownMenu>
@@ -520,7 +617,10 @@ function ProfileSwitcher({ activeId, onSwitch }: { activeId: string; onSwitch: (
           aria-label={`Signed in as ${active.name}. Switch profile`}
           className="flex items-center gap-2.5 rounded-md py-1 pl-1 pr-2 text-left transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:border-l sm:border-border sm:pl-3"
         >
-          <span className="grid size-8 place-items-center rounded-full bg-secondary text-lg" aria-hidden="true">
+          <span
+            className="grid size-8 place-items-center rounded-full bg-secondary text-lg"
+            aria-hidden="true"
+          >
             {active.avatar}
           </span>
           <span className="text-xs leading-[1.3]">
@@ -536,16 +636,27 @@ function ProfileSwitcher({ activeId, onSwitch }: { activeId: string; onSwitch: (
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         {profiles.map((item) => (
-          <DropdownMenuItem key={item.id} onSelect={() => onSwitch(item.id)} className="items-start gap-2.5 py-2">
-            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-secondary text-base" aria-hidden="true">
+          <DropdownMenuItem
+            key={item.id}
+            onSelect={() => onSwitch(item.id)}
+            className="items-start gap-2.5 py-2"
+          >
+            <span
+              className="grid size-7 shrink-0 place-items-center rounded-full bg-secondary text-base"
+              aria-hidden="true"
+            >
               {item.avatar}
             </span>
             <span className="min-w-0 flex-1 text-xs leading-snug">
               <span className="block font-semibold">{item.name}</span>
               <span className="block text-muted-foreground">{item.role}</span>
-              <span className="block text-[11px] text-muted-foreground">Access: {accessSummary(item.panels)}</span>
+              <span className="block text-[11px] text-muted-foreground">
+                Access: {accessSummary(item.panels)}
+              </span>
             </span>
-            {item.id === active.id && <Check size={14} className="mt-0.5 text-primary" aria-label="Current profile" />}
+            {item.id === active.id && (
+              <Check size={14} className="mt-0.5 text-primary" aria-label="Current profile" />
+            )}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -585,7 +696,9 @@ function ReplyDownload({ text, title }: { text: string; title: string }) {
         <DropdownMenuItem onSelect={() => void downloadXlsx(tables, fileName)}>
           <FileSpreadsheet size={15} className="text-series-2" />
           Excel (.xlsx)
-          {tables.length > 1 && <span className="ml-auto text-[10px] text-muted-foreground">1 sheet each</span>}
+          {tables.length > 1 && (
+            <span className="ml-auto text-[10px] text-muted-foreground">1 sheet each</span>
+          )}
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => downloadCsv(tables, fileName)}>
           <FileText size={15} className="text-muted-foreground" />
@@ -658,7 +771,11 @@ function FilterSelect({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {values.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+          {values.map((item) => (
+            <SelectItem key={item} value={item}>
+              {item}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
     </label>

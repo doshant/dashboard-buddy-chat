@@ -1,5 +1,5 @@
 import { sum } from "@/lib/launch-data";
-import { allocate } from "@/lib/scope";
+import { allocate, type PeriodWindow } from "@/lib/scope";
 
 // Marketing figures are stored as raw monthly counts (impressions in thousands) and every
 // total and rate is derived, so the cards, charts and regional table always agree.
@@ -210,8 +210,11 @@ export function withRates(region: string, row: RegionCounts) {
   };
 }
 
-export function buildMarketingData(raw: MarketingRaw, start = 0) {
-  const inPeriod = <T>(rows: T[]) => rows.slice(start);
+export function buildMarketingData(
+  raw: MarketingRaw,
+  { start, end }: PeriodWindow = { start: 0, end: undefined },
+) {
+  const inPeriod = <T>(rows: T[]) => rows.slice(start, end);
 
   const allImpressions = raw.impressions.map((row) => ({
     ...row,

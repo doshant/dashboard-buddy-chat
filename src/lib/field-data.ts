@@ -1,4 +1,5 @@
 import { buildLaunchData, nationalLaunchRaw, sum, type LaunchData } from "@/lib/launch-data";
+import type { PeriodWindow } from "@/lib/scope";
 
 // Field figures are stored as raw counts and every total, rate and average is derived, so the
 // cards, charts and regional table always agree. Prescriber counts come from the launch data.
@@ -147,7 +148,11 @@ export function withFieldRates(row: FieldRegionRow) {
   return { ...row, reachPct: share(row.reached, row.targeted) };
 }
 
-export function buildFieldData(launch: LaunchData, raw: FieldRaw, start = 0) {
+export function buildFieldData(
+  launch: LaunchData,
+  raw: FieldRaw,
+  { start, end }: PeriodWindow = { start: 0, end: undefined },
+) {
   const prescribers = launch.trend.prescribers;
   const allMonths = raw.months.map((row, i) => {
     const total = row.faceToFace + row.virtual + row.phone;
@@ -161,7 +166,7 @@ export function buildFieldData(launch: LaunchData, raw: FieldRaw, start = 0) {
       faceToFacePct: share(row.faceToFace, total),
     };
   });
-  const fieldByMonth = allMonths.slice(start);
+  const fieldByMonth = allMonths.slice(start, end);
   const latest = allMonths[allMonths.length - 1]!;
   const totalCalls = sum(fieldByMonth.map((row) => row.total));
 

@@ -4,31 +4,27 @@ import { buildLaunchData, sum } from "@/lib/launch-data";
 import { buildMarketAccessData } from "@/lib/market-access-data";
 import { buildMarketingData, withRates } from "@/lib/marketing-data";
 import { nationalRaw, regionalRaw, type DashboardRaw } from "@/lib/regional-data";
-import {
-  periodLabels,
-  regionNames,
-  windowStart,
-  type Geography,
-  type Scope,
-  type TimePeriod,
-} from "@/lib/scope";
+import { periodLabel, periodWindow, regionNames, type Geography, type Scope } from "@/lib/scope";
+
+type PeriodScope = Pick<Scope, "period" | "month">;
 
 // Everything the dashboard tabs show, for one geography and time period. The national view uses
 // the national inputs; a region uses its share of them, so the same rules apply everywhere.
 
-function buildFromRaw(raw: DashboardRaw, period: TimePeriod) {
-  const start = windowStart(period);
-  const launch = buildLaunchData(raw.launch, start);
-  const marketAccess = buildMarketAccessData(launch, raw.marketAccess, start);
-  const field = buildFieldData(launch, raw.field, start);
-  const marketing = buildMarketingData(raw.marketing, start);
+function buildFromRaw(raw: DashboardRaw, periodScope: PeriodScope) {
+  const window = periodWindow(periodScope);
+  const launch = buildLaunchData(raw.launch, window);
+  const marketAccess = buildMarketAccessData(launch, raw.marketAccess, window);
+  const field = buildFieldData(launch, raw.field, window);
+  const marketing = buildMarketingData(raw.marketing, window);
   const executive = buildExecutiveData({
     launch,
     marketAccess,
     field,
     marketing,
     referrals: raw.referrals,
-    period,
+    window,
+    label: periodLabel(periodScope),
   });
   return { launch, marketAccess, field, marketing, executive };
 }
@@ -38,10 +34,10 @@ const rawFor = (geography: Geography) =>
 
 // Regional comparison tables for a period, built from each region's own figures so the rows add
 // up to the national totals for that period.
-function regionalTables(period: TimePeriod) {
+function regionalTables(periodScope: PeriodScope) {
   const builds = regionNames.map((region) => ({
     region,
-    data: buildFromRaw(regionalRaw[region], period),
+    data: buildFromRaw(regionalRaw[region], periodScope),
   }));
   const fieldRows = builds.map(({ region, data }) =>
     withFieldRates({
@@ -81,14 +77,14 @@ const cache = new Map<string, ReturnType<typeof build>>();
 function build(scope: Scope) {
   return {
     scope,
-    period: periodLabels[scope.period],
-    ...buildFromRaw(rawFor(scope.geography), scope.period),
-    regional: regionalTables(scope.period),
+    period: periodLabel(scope),
+    ...buildFromRaw(rawFor(scope.geography), scope),
+    regional: regionalTables(scope),
   };
 }
 
 export function buildDashboardData(scope: Scope) {
-  const key = `${scope.geography}|${scope.period}`;
+  const key = `${scope.geography}|${scope.period}|${scope.period === "Monthly" ? (scope.month ?? "Sep") : ""}`;
   let data = cache.get(key);
   if (!data) {
     data = build(scope);

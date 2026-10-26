@@ -6,6 +6,7 @@ import {
   sum,
   type LaunchData,
 } from "@/lib/launch-data";
+import type { PeriodWindow } from "@/lib/scope";
 
 // Market Access figures reuse the launch control totals (referrals, first doses, active
 // patients, shipped vials) so every split reconciles to the same whole. Built from raw inputs so
@@ -107,9 +108,13 @@ export const nationalMarketAccessRaw: MarketAccessRaw = {
   ],
 };
 
-export function buildMarketAccessData(launch: LaunchData, raw: MarketAccessRaw, start = 0) {
+export function buildMarketAccessData(
+  launch: LaunchData,
+  raw: MarketAccessRaw,
+  { start, end }: PeriodWindow = { start: 0, end: undefined },
+) {
   const { funnel, kpis, cancelledByStep, pendingByStep } = launch;
-  const inPeriod = <T>(rows: T[]) => rows.slice(start);
+  const inPeriod = <T>(rows: T[]) => rows.slice(start, end);
 
   const allAdministered = raw.vialsAdministered.map((row) => ({
     ...row,
@@ -171,7 +176,10 @@ export function buildMarketAccessData(launch: LaunchData, raw: MarketAccessRaw, 
   };
 
   // Referral months stop at August, so a Monthly view shows the latest matured month.
-  const timeToTherapy = raw.timeToTherapy.slice(Math.min(start, raw.timeToTherapy.length - 1));
+  const cohorts = raw.timeToTherapy.length;
+  const cohortStart = Math.min(start, cohorts - 1);
+  const cohortEnd = end === undefined ? cohorts : Math.min(Math.max(end, cohortStart + 1), cohorts);
+  const timeToTherapy = raw.timeToTherapy.slice(cohortStart, cohortEnd);
   const timeToTherapySummary = {
     firstApprovedPa: { ...raw.timeToTherapyMedians.firstApprovedPa, patients: funnel.paApproved },
     firstDose: {

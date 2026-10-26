@@ -8,18 +8,46 @@ export type Geography = "Nation" | RegionName;
 export const timePeriods = ["Launch to Date", "QTD", "Monthly"] as const;
 export type TimePeriod = (typeof timePeriods)[number];
 
-export type Scope = { geography: Geography; period: TimePeriod };
+// Months with data (launch month M1 is January 2026); the Monthly period picks one of them.
+export const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"] as const;
+export type MonthName = (typeof monthNames)[number];
+const fullMonthNames: Record<MonthName, string> = {
+  Jan: "January",
+  Feb: "February",
+  Mar: "March",
+  Apr: "April",
+  May: "May",
+  Jun: "June",
+  Jul: "July",
+  Aug: "August",
+  Sep: "September",
+};
+export const latestMonth: MonthName = "Sep";
+
+export type Scope = { geography: Geography; period: TimePeriod; month?: MonthName };
 export const nationalScope: Scope = { geography: "Nation", period: "Launch to Date" };
 
-// Months shown for each period: launch (Jan) to date, Q3 (Jul–Sep), or the latest month (Sep).
-const windowStarts: Record<TimePeriod, number> = { "Launch to Date": 0, QTD: 6, Monthly: 8 };
-export const windowStart = (period: TimePeriod) => windowStarts[period];
+export type PeriodWindow = { start: number; end: number | undefined };
+export type PeriodLabel = { short: string; long: string };
 
-export const periodLabels: Record<TimePeriod, { short: string; long: string }> = {
-  "Launch to Date": { short: "LTD", long: "launch to date" },
-  QTD: { short: "QTD", long: "Q3 to date" },
-  Monthly: { short: "Sep", long: "in September" },
-};
+// Months summed for each period: launch (Jan) to date, Q3 (Jul–Sep), or the chosen month.
+export function periodWindow({ period, month }: Pick<Scope, "period" | "month">): PeriodWindow {
+  if (period === "QTD") return { start: 6, end: undefined };
+  if (period === "Monthly") {
+    const index = monthNames.indexOf(month ?? latestMonth);
+    return { start: index, end: index + 1 };
+  }
+  return { start: 0, end: undefined };
+}
+
+export function periodLabel({ period, month }: Pick<Scope, "period" | "month">): PeriodLabel {
+  if (period === "QTD") return { short: "QTD", long: "Q3 to date" };
+  if (period === "Monthly") {
+    const chosen = month ?? latestMonth;
+    return { short: chosen, long: `in ${fullMonthNames[chosen]}` };
+  }
+  return { short: "LTD", long: "launch to date" };
+}
 
 const sumOf = (values: number[]) => values.reduce((total, value) => total + value, 0);
 

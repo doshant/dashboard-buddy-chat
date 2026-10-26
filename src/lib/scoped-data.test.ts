@@ -6,7 +6,14 @@ import { marketAccessKpis as nationalMarketAccessKpis } from "@/lib/market-acces
 import { marketingKpis as nationalMarketingKpis } from "@/lib/marketing-data";
 import { regionalRaw } from "@/lib/regional-data";
 import { buildDashboardData } from "@/lib/scoped-data";
-import { allocate, regionNames, splitFlow, timePeriods, type TimePeriod } from "@/lib/scope";
+import {
+  allocate,
+  monthNames,
+  regionNames,
+  splitFlow,
+  timePeriods,
+  type TimePeriod,
+} from "@/lib/scope";
 
 const sumOf = (values: number[]) => values.reduce((a, b) => a + b, 0);
 
@@ -149,5 +156,43 @@ describe("Time periods", () => {
     expect(qtd.launch.monthlyVials.map((row) => row.month)).toEqual(["Jul", "Aug", "Sep"]);
     // Point-in-time measures don't change with the period.
     expect(month.launch.kpis.activePatients.total).toBe(ltd.launch.kpis.activePatients.total);
+  });
+});
+
+describe("Choosing a month", () => {
+  const nationalVials = [14, 21, 20, 19, 23, 27, 28, 32, 35];
+
+  it("shows each month's own figures, with regions adding up to the nation", () => {
+    monthNames.forEach((month, m) => {
+      const nation = buildDashboardData({ geography: "Nation", period: "Monthly", month });
+      expect(nation.launch.kpis.vials.total, month).toBe(nationalVials[m]);
+      expect(nation.launch.monthlyVials.map((row) => row.month)).toEqual([month]);
+      const regions = regionNames.map((geography) =>
+        buildDashboardData({ geography, period: "Monthly", month }),
+      );
+      for (const pick of [
+        (d: typeof nation) => d.launch.kpis.vials.total,
+        (d: typeof nation) => d.field.fieldKpis.calls,
+        (d: typeof nation) => d.marketing.marketingKpis.website.total,
+        (d: typeof nation) => d.marketAccess.marketAccessKpis.administered.total,
+      ]) {
+        expect(sumOf(regions.map(pick)), month).toBe(pick(nation));
+      }
+    });
+  });
+
+  it("names the month in labels and keeps September as the default", () => {
+    const march = buildDashboardData({ geography: "Nation", period: "Monthly", month: "Mar" });
+    expect(march.period).toEqual({ short: "Mar", long: "in March" });
+    expect(march.executive.executiveMetrics[0]?.caption).toBe("Net sales (Mar) vs forecast");
+    const byDefault = buildDashboardData({ geography: "Nation", period: "Monthly" });
+    expect(byDefault.launch.kpis.vials.total).toBe(35);
+  });
+
+  it("shows the latest matured referral month for September", () => {
+    const sep = buildDashboardData({ geography: "Nation", period: "Monthly", month: "Sep" });
+    expect(sep.marketAccess.timeToTherapy.map((row) => row.month)).toEqual(["Aug"]);
+    const may = buildDashboardData({ geography: "Nation", period: "Monthly", month: "May" });
+    expect(may.marketAccess.timeToTherapy.map((row) => row.month)).toEqual(["May"]);
   });
 });

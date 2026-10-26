@@ -12,7 +12,7 @@ import {
   nationalMarketingRaw,
   type MarketingData,
 } from "@/lib/marketing-data";
-import { periodLabels, windowStart, type TimePeriod } from "@/lib/scope";
+import { periodLabel, periodWindow, type PeriodLabel, type PeriodWindow } from "@/lib/scope";
 
 // The Executive Summary only re-presents figures owned by the other tabs, plus monthly referrals
 // so fill and abandonment rates can be trended. Targets are demo planning assumptions. Built from
@@ -71,13 +71,14 @@ export type ExecutiveInput = {
   field: FieldData;
   marketing: MarketingData;
   referrals: ReferralRaw;
-  period: TimePeriod;
+  window: PeriodWindow;
+  label: PeriodLabel;
 };
 
 export function buildExecutiveData(input: ExecutiveInput) {
   const { launch, marketAccess, field, marketing, referrals } = input;
-  const start = windowStart(input.period);
-  const period = periodLabels[input.period];
+  const { start, end } = input.window;
+  const period = input.label;
   const { attainment, funnel, kpis, pendingPatients } = launch;
   const { monthlyNetSales, monthlyVials, activePatientsTrend, newPatients, prescribers } =
     launch.trend;
@@ -111,9 +112,9 @@ export function buildExecutiveData(input: ExecutiveInput) {
     abandonPct: share1(cancelledToDate[i] ?? 0, referred),
   }));
   // Fill and abandonment for the period: starts and cancellations per referral in its months.
-  const referredInPeriod = sum(referrals.referralsByMonth.slice(start));
-  const startedInPeriod = sum(startsByMonth.slice(start));
-  const cancelledInPeriod = sum(referrals.cancellationsByMonth.slice(start));
+  const referredInPeriod = sum(referrals.referralsByMonth.slice(start, end));
+  const startedInPeriod = sum(startsByMonth.slice(start, end));
+  const cancelledInPeriod = sum(referrals.cancellationsByMonth.slice(start, end));
 
   const pendingOver30 = kpis.pending.over30;
   const lpPending = pendingPatients.find((row) => row.stage === "Procedure scheduling")?.total ?? 0;
@@ -580,5 +581,6 @@ export const {
   field: buildFieldData(nationalLaunch, nationalFieldRaw),
   marketing: buildMarketingData(nationalMarketingRaw),
   referrals: nationalReferralRaw,
-  period: "Launch to Date",
+  window: periodWindow({ period: "Launch to Date" }),
+  label: periodLabel({ period: "Launch to Date" }),
 });
