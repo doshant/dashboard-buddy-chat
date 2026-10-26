@@ -11,4 +11,5 @@
 
 ## Dashboard prototype
 
-- Keep the launch Overview's reference metrics and canned assistant replies in a browser-safe data module, with chart rendering and transient chat state in the page, so this demo remains deterministic and backend-free.
+- Keep the dashboard's reference metrics and the assistant's preset replies in browser-safe data modules, with chart rendering and transient chat state in the page, so the dashboard itself stays deterministic.
+- The Dashboard Assistant answers through the `/api/chat` server route, grounded only on those data modules (filtered to the user's profile access and selected scope). In local development, `ASSISTANT_BACKEND=claude-code` in `.env.local` uses the Claude Code CLI with the presenter's own subscription; that path is dev-only and excluded from production builds. Deployed builds (Vercel) use the Claude API only if `ANTHROPIC_API_KEY` is set server-side, and otherwise the preset replies.

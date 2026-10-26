@@ -39,10 +39,22 @@ describe("Executive Summary panel", () => {
     expect(screen.getByText("Avg patient cost per dose")).toBeTruthy();
   });
 
-  it("switches the active patients chart between all active and by status", () => {
+  it("switches the active patients chart between By Status and By Channel", () => {
     render(<ExecutivePanel />);
+    expect(screen.getByRole("button", { name: "By Status" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
     expect(screen.getByText(/loading \(doses 1–2\) vs maintenance/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "By status" }));
-    expect(screen.getByText(/Commercial is paid/)).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: /Show by status series/ }).textContent).toBe(
+      "Overall",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "By Channel" }));
+    expect(screen.queryByText(/loading \(doses 1–2\) vs maintenance/)).toBeNull();
+    expect(screen.queryByText(/Commercial is paid/)).toBeNull();
+    expect(screen.getByText("Quick Start")).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: /Show by channel series/ }).textContent).toBe(
+      "Overall",
+    );
   });
 });

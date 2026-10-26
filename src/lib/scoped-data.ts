@@ -25,6 +25,12 @@ function buildFromRaw(raw: DashboardRaw, periodScope: PeriodScope) {
     referrals: raw.referrals,
     window,
     label: periodLabel(periodScope),
+    trendView:
+      periodScope.period === "QTD"
+        ? "quarterly"
+        : periodScope.period === "Monthly"
+          ? "none"
+          : "monthly",
   });
   return { launch, marketAccess, field, marketing, executive };
 }

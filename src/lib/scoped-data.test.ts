@@ -196,3 +196,25 @@ describe("Choosing a month", () => {
     expect(may.marketAccess.timeToTherapy.map((row) => row.month)).toEqual(["May"]);
   });
 });
+
+describe("Executive Summary trend lines", () => {
+  const trendOf = (period: TimePeriod, key: string) =>
+    buildDashboardData({ geography: "Nation", period }).executive.executiveMetrics.find(
+      (metric) => metric.key === key,
+    )!.trend;
+
+  it("reads by month for launch to date", () => {
+    expect(trendOf("Launch to Date", "demand")).toEqual([14, 21, 20, 19, 23, 27, 28, 32, 35]);
+  });
+
+  it("reads quarter over quarter for QTD: totals add up, levels take the quarter end", () => {
+    expect(trendOf("QTD", "demand")).toEqual([55, 69, 95]);
+    expect(trendOf("QTD", "patients")).toEqual([23, 41, 62]);
+  });
+
+  it("is left out for a single month, so only the numbers show", () => {
+    expect(trendOf("Monthly", "demand")).toEqual([]);
+    const kpis = buildDashboardData({ geography: "Nation", period: "Monthly" }).executive.kpiGroups;
+    for (const group of kpis) expect(group.trend).toEqual([]);
+  });
+});

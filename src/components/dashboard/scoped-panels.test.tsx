@@ -83,6 +83,27 @@ describe("Tabs follow the geography and time period filters", () => {
     }
   });
 
+  it("draws the Field Activity card trends by month, by quarter, or not at all", () => {
+    const trendLines = () =>
+      screen.queryAllByRole("img").map((el) => el.getAttribute("aria-label") ?? "");
+
+    renderTab(FieldPanel, nation);
+    expect(trendLines().filter((label) => label.endsWith("by month"))).toHaveLength(8);
+    expect(trendLines()).toContain("HCPs targeted by month");
+    cleanup();
+
+    renderTab(FieldPanel, { geography: "Nation", period: "QTD" });
+    expect(trendLines().filter((label) => label.endsWith("by quarter"))).toHaveLength(8);
+    const targeted = screen.getByRole("img", { name: "HCPs targeted by quarter" });
+    expect(
+      targeted.querySelectorAll("polyline")[0]?.getAttribute("points")?.split(" "),
+    ).toHaveLength(3);
+    cleanup();
+
+    renderTab(FieldPanel, { geography: "Nation", period: "Monthly", month: "Mar" });
+    expect(trendLines().filter((label) => /by (month|quarter)$/.test(label))).toHaveLength(0);
+  });
+
   it("shows different numbers for different scopes", () => {
     const a = buildDashboardData(nation);
     const b = buildDashboardData(northeastQtd);

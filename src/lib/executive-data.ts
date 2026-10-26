@@ -13,6 +13,7 @@ import {
   type MarketingData,
 } from "@/lib/marketing-data";
 import { periodLabel, periodWindow, type PeriodLabel, type PeriodWindow } from "@/lib/scope";
+import { shapeTrend, type TrendView } from "@/lib/trend";
 
 // The Executive Summary only re-presents figures owned by the other tabs, plus monthly referrals
 // so fill and abandonment rates can be trended. Targets are demo planning assumptions. Built from
@@ -73,11 +74,14 @@ export type ExecutiveInput = {
   referrals: ReferralRaw;
   window: PeriodWindow;
   label: PeriodLabel;
+  trendView: TrendView;
 };
 
 export function buildExecutiveData(input: ExecutiveInput) {
   const { launch, marketAccess, field, marketing, referrals } = input;
   const { start, end } = input.window;
+  const totals = (values: number[]) => shapeTrend(values, "sum", input.trendView);
+  const levels = (values: number[]) => shapeTrend(values, "last", input.trendView);
   const period = input.label;
   const { attainment, funnel, kpis, pendingPatients } = launch;
   const { monthlyNetSales, monthlyVials, activePatientsTrend, newPatients, prescribers } =
@@ -134,7 +138,7 @@ export function buildExecutiveData(input: ExecutiveInput) {
       value: `${kpis.netSales.attainmentPct}%`,
       caption: `Net sales (${period.short}) vs forecast`,
       status: statusFor(kpis.netSales.attainmentPct),
-      trend: monthlyNetSales.map((row) => row.actual),
+      trend: totals(monthlyNetSales.map((row) => row.actual)),
       detail: {
         label: `${kpis.netSales.ltd}M net sales ${period.long}`,
         badge: {
@@ -180,7 +184,7 @@ export function buildExecutiveData(input: ExecutiveInput) {
       value: `${kpis.vials.lePct}%`,
       caption: `Vials (${period.short}) vs latest estimate`,
       status: statusFor(kpis.vials.lePct),
-      trend: monthlyVials.map((row) => row.total),
+      trend: totals(monthlyVials.map((row) => row.total)),
       detail: {
         label: `${kpis.vials.total} vials shipped ${period.long}`,
         badge: { text: `${kpis.vials.lePct}% of ${kpis.vials.le} LE`, tone: "good" },
@@ -213,7 +217,7 @@ export function buildExecutiveData(input: ExecutiveInput) {
       value: `${fieldKpis.reachPct}%`,
       caption: `HCP reach vs ${executiveTargets.hcpReachPct}% target`,
       status: statusFor((fieldKpis.reachPct / executiveTargets.hcpReachPct) * 100),
-      trend: fieldByMonth.map((row) => row.reachPct),
+      trend: levels(fieldByMonth.map((row) => row.reachPct)),
       detail: {
         label: `${fieldKpis.reached} of ${fieldKpis.targeted} targeted HCPs reached`,
         badge: { text: `Target: ${executiveTargets.hcpReachPct}%`, tone: "watch" },
@@ -239,7 +243,7 @@ export function buildExecutiveData(input: ExecutiveInput) {
       value: `${kpis.activePatients.total}`,
       caption: "Active patients",
       status: kpis.activePatients.changePct >= 0 ? "On track" : "Watch",
-      trend: activePatientsTrend.map((row) => row.loading + row.maintenance),
+      trend: levels(activePatientsTrend.map((row) => row.loading + row.maintenance)),
       detail: {
         label: `${kpis.activePatients.total} active patients (${kpis.activePatients.paid} paid, ${kpis.activePatients.free} free)`,
         badge: { text: `+${kpis.activePatients.changePct}% MoM`, tone: "good" },
@@ -273,7 +277,7 @@ export function buildExecutiveData(input: ExecutiveInput) {
       value: `${Math.round(fillPct)}%`,
       caption: "Referrals reaching a first dose",
       status: statusFor((fillPct / executiveTargets.fillRatePct) * 100),
-      trend: fillAndAbandonByMonth.map((row) => row.fillPct),
+      trend: levels(fillAndAbandonByMonth.map((row) => row.fillPct)),
       detail: {
         label: `${startedInPeriod} of ${referredInPeriod} referrals filled ${period.long}`,
         badge: { text: `Target: ${executiveTargets.fillRatePct}%`, tone: "good" },
@@ -307,7 +311,7 @@ export function buildExecutiveData(input: ExecutiveInput) {
       value: `${abandonPct}%`,
       caption: "Referrals cancelled before a first dose",
       status: abandonPct <= executiveTargets.abandonmentMaxPct ? "On track" : "Behind",
-      trend: fillAndAbandonByMonth.map((row) => row.abandonPct),
+      trend: levels(fillAndAbandonByMonth.map((row) => row.abandonPct)),
       detail: {
         label: `${cancelledInPeriod} of ${referredInPeriod} referrals abandoned ${period.long}`,
         badge: { text: `Target: ≤ ${executiveTargets.abandonmentMaxPct}%`, tone: "good" },
@@ -388,7 +392,7 @@ export function buildExecutiveData(input: ExecutiveInput) {
       value: `$${kpis.netSales.ltd}M`,
       label: `Net sales ${period.long}`,
       badge: { text: `${kpis.netSales.attainmentPct}% of forecast`, tone: "watch" },
-      trend: monthlyNetSales.map((row) => row.actual),
+      trend: totals(monthlyNetSales.map((row) => row.actual)),
       submetrics: [
         {
           label: "Net sales, Q3 QTD",
@@ -419,7 +423,7 @@ export function buildExecutiveData(input: ExecutiveInput) {
       value: `${timeToTherapySummary.firstDose.median}d`,
       label: "Median days, referral to first dose",
       badge: { text: firstDoseTrend, tone: "good" },
-      trend: timeToTherapy.map((row) => row.firstDose),
+      trend: levels(timeToTherapy.map((row) => row.firstDose)),
       submetrics: [
         {
           label: "Median days to PA approval",
@@ -447,7 +451,7 @@ export function buildExecutiveData(input: ExecutiveInput) {
       value: `${pctOf(funnel.maintenance, funnel.firstDose)}%`,
       label: "Starters reaching maintenance (dose 3+)",
       badge: { text: `${funnel.maintenance} of ${funnel.firstDose}`, tone: "neutral" },
-      trend: activePatientsTrend.map((row) => row.maintenance),
+      trend: levels(activePatientsTrend.map((row) => row.maintenance)),
       submetrics: [
         {
           label: "Second-dose rate",
@@ -472,7 +476,7 @@ export function buildExecutiveData(input: ExecutiveInput) {
       value: `${paidDoses}`,
       label: "Paid doses administered since launch",
       badge: { text: `Medicare FFS ${pctOf(medicareFfsDoses, paidDoses)}%`, tone: "neutral" },
-      trend: vialsAdministered.map((row) => row.paid),
+      trend: totals(vialsAdministered.map((row) => row.paid)),
       submetrics: [
         {
           label: "Medicare share of referrals",
@@ -500,7 +504,7 @@ export function buildExecutiveData(input: ExecutiveInput) {
       value: `${latestPrescribers.new}`,
       label: "New prescribers in September",
       badge: { text: lastBusier ? `Most since ${lastBusier.month}` : "Highest yet", tone: "good" },
-      trend: prescribers.map((row) => row.new),
+      trend: totals(prescribers.map((row) => row.new)),
       submetrics: [
         {
           label: "Prescribers since launch",
@@ -528,7 +532,7 @@ export function buildExecutiveData(input: ExecutiveInput) {
       value: formatRate(marketingKpis.hva.rate),
       label: "Website visits with a high value action",
       badge: { text: `${formatCount(marketingKpis.hva.total)} actions`, tone: "neutral" },
-      trend: websiteVisitsByMonth.map((row) => row.total),
+      trend: totals(websiteVisitsByMonth.map((row) => row.total)),
       submetrics: [
         {
           label: "Website visits",
@@ -560,6 +564,7 @@ export function buildExecutiveData(input: ExecutiveInput) {
     executiveInsights,
     executiveKpis,
     kpiGroups,
+    trendView: input.trendView,
     fillAndAbandonByMonth,
     referralsByMonth: referrals.referralsByMonth,
   };
@@ -583,4 +588,5 @@ export const {
   referrals: nationalReferralRaw,
   window: periodWindow({ period: "Launch to Date" }),
   label: periodLabel({ period: "Launch to Date" }),
+  trendView: "monthly",
 });

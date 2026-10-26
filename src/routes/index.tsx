@@ -110,7 +110,14 @@ type ChatMessage = {
   text: string;
   title?: string;
   suggestions?: string[];
+  // Assistant answers come from Claude; "preset" marks the offline fallback answer.
+  source?: "claude" | "preset";
+  // Set when a live answer was expected but failed, so the preset answer is labelled.
+  fallback?: boolean;
 };
+
+// Earlier turns sent with each question so Claude can follow up on them.
+const chatHistoryTurns = 10;
 
 // The assistant can be dragged wider from its left edge; it reopens at the default width.
 const chatWidthDefault = 520;
@@ -120,7 +127,8 @@ const chatWidthMax = 960;
 // Assistant reply tables: resizable column headers; values centred, text left-aligned.
 const chatTableComponents = { th: ResizableHeaderCell, td: ChatTableCell };
 
-// Preset replies are "thought about" briefly, then typed out a word at a time.
+// Live answers stream from Claude. Preset (fallback) replies are "thought about" for at least
+// this long, then typed out a word at a time.
 const replyThinkingMs = 2000;
 const replyWordMs = 28;
 
@@ -175,12 +183,37 @@ function LaunchTracker() {
   const [chatOpen, setChatOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatWidth, setChatWidth] = useState(chatWidthDefault);
-  // The assistant message being revealed: 0 characters shown means it is still "thinking".
+  // Whether the server answers live (Claude Code locally, or the Claude API) or with presets.
+  const [assistantMode, setAssistantMode] = useState<"unknown" | "live" | "preset">("unknown");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/chat")
+      .then((response) => (response.ok ? response.json() : { mode: "preset" }))
+      .then((body: { mode?: string }) => {
+        if (!cancelled) setAssistantMode(body.mode === "preset" ? "preset" : "live");
+      })
+      .catch(() => {
+        if (!cancelled) setAssistantMode("preset");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  // The assistant message being revealed: 0 characters shown means it is still "thinking";
+  // -1 means a live answer is streaming in.
   const [reply, setReply] = useState<{ id: number; shown: number } | null>(null);
   const replyTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const replyRequest = useRef<AbortController | undefined>(undefined);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => () => clearTimeout(replyTimer.current), []);
+  useEffect(
+    () => () => {
+      clearTimeout(replyTimer.current);
+      replyRequest.current?.abort();
+    },
+    [],
+  );
 
   function resizeChat(width: number) {
     setChatWidth(clampChatWidth(width));
@@ -239,10 +272,73 @@ function LaunchTracker() {
     if (!next.panels.includes(panel.label)) setActivePanel(next.panels[0] ?? "Overview");
   }
 
-  // Ends any reply in progress, leaving its full text visible.
+  // Ends any reply in progress, leaving the text received so far visible.
   function finishReply() {
     clearTimeout(replyTimer.current);
+    replyRequest.current?.abort();
+    replyRequest.current = undefined;
     setReply(null);
+  }
+
+  const updateMessage = (id: number, change: Partial<ChatMessage>) =>
+    setMessages((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...change } : item)),
+    );
+
+  // Streams Claude's answer into the message. "unconfigured" means the server is in preset mode;
+  // "failed" means a live answer was expected but didn't arrive. Either way the caller shows the
+  // preset answer.
+  async function streamLiveAnswer(
+    id: number,
+    history: { role: "user" | "assistant"; content: string }[],
+    signal: AbortSignal,
+  ): Promise<"answered" | "unconfigured" | "failed"> {
+    let response: Response;
+    try {
+      response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          profileId: profile.id,
+          scope: {
+            geography: geographyName,
+            period: timePeriod,
+            ...(timePeriod === "Monthly" && { month }),
+          },
+          messages: history,
+        }),
+        signal,
+      });
+    } catch {
+      return "failed";
+    }
+    if (response.status === 503) return "unconfigured";
+    if (!response.ok || !response.body) return "failed";
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let text = "";
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value, { stream: true });
+        updateMessage(id, { text, source: "claude" });
+        setReply({ id, shown: -1 });
+      }
+    } catch {
+      // A dropped stream keeps whatever arrived; with nothing yet, fall back.
+    }
+    if (!text) return "failed";
+    setReply((current) => (current?.id === id ? null : current));
+    return "answered";
+  }
+
+  function showPresetAnswer(id: number, response: string, startedAt: number, fallback: boolean) {
+    updateMessage(id, { text: response, source: "preset", fallback });
+    const ends = wordEnds(response);
+    const wait = Math.max(0, replyThinkingMs - (Date.now() - startedAt));
+    replyTimer.current = setTimeout(() => typeReply(id, ends, 0), wait);
   }
 
   function clearChat() {
@@ -261,22 +357,43 @@ function LaunchTracker() {
 
   function sendQuestion(question: string) {
     finishReply();
-    const answer = resolveDashboardAnswer(question, profile.panels);
+    // The preset answer supplies the download title and follow-up suggestions, and is the
+    // fallback text when no live answer is available.
+    const preset = resolveDashboardAnswer(question, profile.panels);
     const id = Date.now();
+    const replyId = id + 1;
+    const earlier = messages
+      .filter((item) => item.text)
+      .slice(-chatHistoryTurns)
+      .map((item) => ({ role: item.role, content: item.text }));
+    while (earlier[0]?.role === "assistant") earlier.shift();
+    const history = [...earlier, { role: "user" as const, content: question }];
+
     setMessages((current) => [
       ...current,
       { id, role: "user", text: question },
       {
-        id: id + 1,
+        id: replyId,
         role: "assistant",
-        text: answer.response,
-        title: answer.title,
-        suggestions: answer.suggestions,
+        text: "",
+        title: preset.title,
+        suggestions: preset.suggestions,
       },
     ]);
-    setReply({ id: id + 1, shown: 0 });
-    const ends = wordEnds(answer.response);
-    replyTimer.current = setTimeout(() => typeReply(id + 1, ends, 0), replyThinkingMs);
+    setReply({ id: replyId, shown: 0 });
+
+    const startedAt = Date.now();
+    if (assistantMode === "preset") {
+      showPresetAnswer(replyId, preset.response, startedAt, false);
+      return;
+    }
+    const request = new AbortController();
+    replyRequest.current = request;
+    void streamLiveAnswer(replyId, history, request.signal).then((outcome) => {
+      if (outcome === "answered" || request.signal.aborted) return;
+      if (outcome === "unconfigured") setAssistantMode("preset");
+      showPresetAnswer(replyId, preset.response, startedAt, outcome === "failed");
+    });
   }
 
   function handlePromptSubmit({ text }: { text: string }, event: FormEvent<HTMLFormElement>) {
@@ -513,10 +630,17 @@ function LaunchTracker() {
                           components={chatTableComponents}
                           isAnimating={Boolean(revealing)}
                         >
-                          {revealing ? message.text.slice(0, revealing.shown) : message.text}
+                          {revealing && revealing.shown > 0
+                            ? message.text.slice(0, revealing.shown)
+                            : message.text}
                         </MessageResponse>
                       )}
                     </MessageContent>
+                    {message.fallback && !revealing && (
+                      <p className="text-[10px] text-muted-foreground">
+                        Preset answer · live answers are unavailable right now
+                      </p>
+                    )}
                     {message.role === "assistant" && !revealing && (
                       <ReplyDownload text={message.text} title={message.title ?? ""} />
                     )}
@@ -576,7 +700,9 @@ function LaunchTracker() {
               />
               <PromptInputFooter className="justify-between border-t border-border px-2 py-1.5">
                 <span className="text-[10px] text-muted-foreground">
-                  Dashboard demo · preset replies
+                  {assistantMode === "preset"
+                    ? "Preset answers · based on dashboard data"
+                    : "Answers from Claude · based on dashboard data"}
                 </span>
                 <PromptInputSubmit className="size-8 rounded-md" aria-label="Send message">
                   <Send size={15} />

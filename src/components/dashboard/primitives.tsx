@@ -88,7 +88,7 @@ export function StatCard({
           <Icon size={15} strokeWidth={2.1} />
         </span>
       </div>
-      {trend ? (
+      {trend && trend.values.length > 1 ? (
         <div className="flex items-end justify-between gap-3">
           <p className="text-[26px] font-bold leading-none tabular-nums">{value}</p>
           <Sparkline values={trend.values} label={trend.label} />

@@ -35,6 +35,7 @@ import {
 } from "@/components/dashboard/primitives";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import { callTypes, withFieldRates } from "@/lib/field-data";
+import { shapeRate, shapeTrend, trendLabel } from "@/lib/trend";
 
 type RegionRow = ReturnType<typeof withFieldRates>;
 
@@ -56,14 +57,21 @@ const regionColumns = [
 
 export function FieldPanel() {
   const [callFilter, setCallFilter] = useState<CallFilter>("all");
-  const { field, regional, scope, period } = useDashboardData();
+  const { field, regional, scope, period, executive } = useDashboardData();
   const { callMix, engagementFunnel, fieldByMonth, fieldKpis: k } = field;
   const { rows: fieldRegionalSummary, total: fieldRegionalTotal } = regional.field;
-  // Sparklines and launch comparisons use every month since launch, whatever the period.
+  // Launch comparisons use every month since launch. The small trend charts follow the period:
+  // by month for launch to date, quarter over quarter for QTD, numbers only for a single month.
   const trendMonths = field.trend.fieldByMonth;
-  const trendOf = (
-    key: "reached" | "reachPct" | "ordering" | "total" | "callsPerDay" | "faceToFacePct",
+  const view = executive.trendView;
+  const by = trendLabel(view);
+  const column = (
+    key: "targeted" | "reached" | "reachPct" | "ordering" | "total" | "faceToFace" | "sellingDays",
   ) => trendMonths.map((row) => row[key]);
+  const levels = (key: Parameters<typeof column>[0]) => shapeTrend(column(key), "last", view);
+  const callsPerReachedHcp = trendMonths.map(
+    (row, i) => trendMonths.slice(0, i + 1).reduce((acc, r) => acc + r.total, 0) / row.reached,
+  );
   const firstMonth = trendMonths[0];
 
   const shownSeries =
@@ -93,10 +101,7 @@ export function FieldPanel() {
           value={`${k.targeted}`}
           detail="Treating physicians on the call plan"
           comparison={{ text: `Up from ${firstMonth?.targeted} in ${firstMonth?.month}` }}
-          trend={{
-            values: fieldByMonth.map((row) => row.targeted),
-            label: "HCPs targeted by month",
-          }}
+          trend={{ values: levels("targeted"), label: `HCPs targeted ${by}` }}
         />
         <StatCard
           title="HCPs Reached"
@@ -107,7 +112,7 @@ export function FieldPanel() {
             text: `+${k.reached - (trendMonths.at(-2)?.reached ?? 0)} in ${trendMonths.at(-1)?.month}`,
             direction: "up",
           }}
-          trend={{ values: trendOf("reached"), label: "HCPs reached by month" }}
+          trend={{ values: levels("reached"), label: `HCPs reached ${by}` }}
         />
         <StatCard
           title="Reach %"
@@ -118,7 +123,7 @@ export function FieldPanel() {
             text: `Up from ${Math.round(firstMonth?.reachPct ?? 0)}% in ${firstMonth?.month}`,
             direction: "up",
           }}
-          trend={{ values: trendOf("reachPct"), label: "Reach % by month" }}
+          trend={{ values: levels("reachPct"), label: `Reach % ${by}` }}
         />
         <StatCard
           title="Active Prescribers"
@@ -126,7 +131,7 @@ export function FieldPanel() {
           value={`${k.activePrescribers}`}
           detail="HCPs ordering in Sep"
           comparison={{ text: `${k.prescribersSinceLaunch} prescribers since launch` }}
-          trend={{ values: trendOf("ordering"), label: "Ordering prescribers by month" }}
+          trend={{ values: levels("ordering"), label: `Ordering prescribers ${by}` }}
         />
         <StatCard
           title="Total Calls Made"
@@ -140,7 +145,7 @@ export function FieldPanel() {
                 : `${k.latestCalls} in M9, up from ${k.firstCalls} in ${k.firstMonth}`,
             direction: "up",
           }}
-          trend={{ values: trendOf("total"), label: "Calls by month" }}
+          trend={{ values: shapeTrend(column("total"), "sum", view), label: `Calls ${by}` }}
         />
         <StatCard
           title="Avg Calls / HCP"
@@ -149,11 +154,8 @@ export function FieldPanel() {
           detail={`${k.calls.toLocaleString("en-US")} calls across ${k.reached} reached HCPs`}
           comparison={{ text: `Calls ${period.long}` }}
           trend={{
-            values: trendMonths.map(
-              (row, i) =>
-                trendMonths.slice(0, i + 1).reduce((acc, r) => acc + r.total, 0) / row.reached,
-            ),
-            label: "Cumulative calls per reached HCP by month",
+            values: shapeTrend(callsPerReachedHcp, "last", view),
+            label: `Cumulative calls per reached HCP ${by}`,
           }}
         />
         <StatCard
@@ -162,7 +164,10 @@ export function FieldPanel() {
           value={k.callsPerDay.toFixed(1)}
           detail={`Field team, over ${k.sellingDays} selling days`}
           comparison={{ text: `${k.latestCallsPerDay.toFixed(1)} a day in M9`, direction: "up" }}
-          trend={{ values: trendOf("callsPerDay"), label: "Calls per day by month" }}
+          trend={{
+            values: shapeRate(column("total"), column("sellingDays"), view),
+            label: `Calls per day ${by}`,
+          }}
         />
         <StatCard
           title="Face-to-Face Rate"
@@ -170,7 +175,10 @@ export function FieldPanel() {
           value={`${k.faceToFacePct}%`}
           detail="Share of all calls made in person"
           comparison={{ text: `Virtual ${callMix[1]?.pct}% · Phone ${callMix[2]?.pct}%` }}
-          trend={{ values: trendOf("faceToFacePct"), label: "Face-to-face share by month" }}
+          trend={{
+            values: shapeRate(column("faceToFace"), column("total"), view, 100),
+            label: `Face-to-face share ${by}`,
+          }}
         />
       </section>
 

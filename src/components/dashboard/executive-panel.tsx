@@ -8,6 +8,13 @@ import {
 } from "@/components/dashboard/primitives";
 import type { Series } from "@/components/dashboard/chart-theme";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { LaunchData } from "@/lib/launch-data";
 import { type ExecutiveMetric, type KpiGroup, type Status, type Tone } from "@/lib/executive-data";
 
@@ -25,31 +32,45 @@ const toneClass: Record<Tone, string> = {
   neutral: "border-border bg-secondary/60 text-muted-foreground",
 };
 
-const activeViewsFor = ({ activePatientsTrend, activeByStatus }: LaunchData) => ({
-  all: {
-    label: "All active",
+type ActiveView = {
+  label: string;
+  subtitle?: string;
+  data: ({ month: string } & Record<string, string | number>)[];
+  series: Series[];
+};
+
+const activeViewsFor = ({
+  activePatientsTrend,
+  activeByStatus,
+}: LaunchData): Record<"status" | "channel", ActiveView> => ({
+  status: {
+    label: "By Status",
     subtitle: "Dosed in last 16 weeks · loading (doses 1–2) vs maintenance (3+)",
-    data: activePatientsTrend.map((row) => ({ ...row, total: row.loading + row.maintenance })),
+    data: activePatientsTrend,
     series: [
       { key: "maintenance", label: "Maintenance", color: "series-1" },
       { key: "loading", label: "Loading", color: "series-2" },
-    ] satisfies Series[],
+    ],
   },
-  status: {
-    label: "By status",
-    subtitle: "Commercial is paid; Quick Start, Bridge and PAP are free",
-    data: activeByStatus.map((row) => ({
-      ...row,
-      total: row.commercial + row.quickStart + row.bridge + row.pap,
-    })),
+  channel: {
+    label: "By Channel",
+    data: activeByStatus,
     series: [
       { key: "commercial", label: "Commercial", color: "series-1" },
       { key: "quickStart", label: "Quick Start", color: "series-2" },
       { key: "bridge", label: "Bridge", color: "series-3" },
       { key: "pap", label: "PAP", color: "series-4" },
-    ] satisfies Series[],
+    ],
   },
 });
+
+// Shows every series stacked ("overall") or one series on its own; the bar total follows.
+function seriesRows(view: ActiveView, shown: Series[]) {
+  return view.data.map((row) => ({
+    ...row,
+    total: shown.reduce((acc, item) => acc + Number(row[item.key] ?? 0), 0),
+  }));
+}
 
 function Badge({ text, tone }: { text: string; tone: Tone }) {
   return (
@@ -70,6 +91,23 @@ function StatusLabel({ status }: { status: Status }) {
   );
 }
 
+// Small trend line that follows the period: by month, quarter over quarter, or hidden for a
+// single month (the numbers alone are shown).
+function TrendLine({
+  values,
+  title,
+  className,
+}: {
+  values: number[];
+  title: string;
+  className: string;
+}) {
+  const { executive } = useDashboardData();
+  if (values.length < 2) return null;
+  const by = executive.trendView === "quarterly" ? "by quarter" : "by month";
+  return <Sparkline values={values} label={`${title} ${by}`} className={className} />;
+}
+
 function MetricDetail({ metric }: { metric: ExecutiveMetric }) {
   return (
     <div
@@ -80,11 +118,7 @@ function MetricDetail({ metric }: { metric: ExecutiveMetric }) {
         <p className="text-xs font-bold text-primary">{metric.title}</p>
         <p className="text-sm font-semibold leading-snug">{metric.detail.label}</p>
         <Badge {...metric.detail.badge} />
-        <Sparkline
-          values={metric.trend}
-          label={`${metric.title} by month`}
-          className="mt-1 h-12 w-full"
-        />
+        <TrendLine values={metric.trend} title={metric.title} className="mt-1 h-12 w-full" />
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
         {metric.detail.submetrics.map((item) => (
@@ -113,11 +147,7 @@ function KpiCard({ group }: { group: KpiGroup }) {
           <p className="text-[11px] leading-snug text-muted-foreground">{group.label}</p>
           <Badge {...group.badge} />
         </div>
-        <Sparkline
-          values={group.trend}
-          label={`${group.title} trend by month`}
-          className="h-11 w-32"
-        />
+        <TrendLine values={group.trend} title={group.title} className="h-11 w-32" />
       </div>
       <dl className="mt-3 grid grid-cols-3 gap-3 border-t border-border pt-3">
         {group.submetrics.map((item) => (
@@ -138,13 +168,18 @@ function KpiCard({ group }: { group: KpiGroup }) {
 
 export function ExecutivePanel() {
   const [selected, setSelected] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<"all" | "status">("all");
+  const [activeView, setActiveView] = useState<"status" | "channel">("status");
+  const [activeSeries, setActiveSeries] = useState("overall");
   const { executive, launch } = useDashboardData();
   const { executiveInsights, executiveMetrics, kpiGroups } = executive;
   const { kpis, pendingPatients } = launch;
   const activeViews = activeViewsFor(launch);
   const selectedMetric = executiveMetrics.find((metric) => metric.key === selected);
   const view = activeViews[activeView];
+  const shownSeries =
+    activeSeries === "overall"
+      ? view.series
+      : view.series.filter((item) => item.key === activeSeries);
 
   return (
     <>
@@ -196,9 +231,9 @@ export function ExecutivePanel() {
                 <span className="text-[11px] leading-snug text-muted-foreground">
                   {metric.caption}
                 </span>
-                <Sparkline
+                <TrendLine
                   values={metric.trend}
-                  label={`${metric.title} by month`}
+                  title={metric.title}
                   className="mt-auto h-7 w-full"
                 />
               </button>
@@ -224,29 +259,52 @@ export function ExecutivePanel() {
       <section aria-label="Patient charts" className="dashboard-chart-grid grid grid-cols-12 gap-4">
         <DashboardPanel
           title="Active Patients"
-          subtitle={view.subtitle}
+          {...(view.subtitle && { subtitle: view.subtitle })}
           className="col-span-12 lg:col-span-7"
           action={
-            <div
-              className="flex shrink-0 rounded-md border border-border p-0.5"
-              role="group"
-              aria-label="Active patients view"
-            >
-              {(Object.keys(activeViews) as (keyof typeof activeViews)[]).map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  aria-pressed={activeView === key}
-                  onClick={() => setActiveView(key)}
-                  className={`rounded px-2 py-1 text-[11px] font-medium transition-colors ${activeView === key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+              <div
+                className="flex rounded-md border border-border p-0.5"
+                role="group"
+                aria-label="Active patients view"
+              >
+                {(Object.keys(activeViews) as (keyof typeof activeViews)[]).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={activeView === key}
+                    onClick={() => {
+                      setActiveView(key);
+                      setActiveSeries("overall");
+                    }}
+                    className={`rounded px-2 py-1 text-[11px] font-medium transition-colors ${activeView === key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+                  >
+                    {activeViews[key].label}
+                  </button>
+                ))}
+              </div>
+              <Select value={activeSeries} onValueChange={setActiveSeries}>
+                <SelectTrigger
+                  aria-label={`Show ${view.label.toLowerCase()} series`}
+                  className="h-7 w-[118px] rounded-md px-2 text-[11px] shadow-none"
                 >
-                  {activeViews[key].label}
-                </button>
-              ))}
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="overall" className="text-xs">
+                    Overall
+                  </SelectItem>
+                  {view.series.map((item) => (
+                    <SelectItem key={item.key} value={item.key} className="text-xs">
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           }
         >
-          <StackedMonthlyBars data={view.data} series={view.series} />
+          <StackedMonthlyBars data={seriesRows(view, shownSeries)} series={shownSeries} />
         </DashboardPanel>
 
         <DashboardPanel

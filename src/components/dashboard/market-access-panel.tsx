@@ -253,7 +253,7 @@ export function MarketAccessPanel() {
         </DashboardPanel>
 
         <DashboardPanel
-          title="New Patients by Goods Type"
+          title="New Patients by Channel Type"
           subtitle="How each new patient's first dose was covered"
           className="col-span-12 xl:col-span-7"
         >
