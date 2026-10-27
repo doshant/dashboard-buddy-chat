@@ -73,15 +73,16 @@ function Simulator({ baseline, geography }: { baseline: SimulatorBaseline; geogr
   const where = geography === "Nation" ? "National" : geography;
 
   return (
-    // On wide screens the two panes fill the height between the header and the tab bar.
+    // Assumptions (a third of the width, at least 220px) and the chart stay side by side, filling the height
+    // between the header and the tab bar. Only phone widths stack them.
     <section
       aria-label="What-if simulator"
-      className="grid grid-cols-12 gap-4 xl:min-h-[calc(100dvh-11.5rem)]"
+      className="grid grid-cols-1 gap-4 sm:min-h-[calc(100dvh-11.5rem)] sm:grid-cols-[minmax(220px,1fr)_minmax(0,2fr)]"
     >
       <DashboardPanel
         title="Assumptions"
         subtitle={`${where} launch-to-date figures are the starting point`}
-        className="col-span-12 flex flex-col xl:col-span-4"
+        className="flex min-w-0 flex-col"
         action={
           <button
             type="button"
@@ -169,7 +170,7 @@ function Simulator({ baseline, geography }: { baseline: SimulatorBaseline; geogr
       <DashboardPanel
         title="Projected Net Sales: Current vs Simulated"
         subtitle={`${where} · $M a month · actual Jul–Sep, projected ${simulatorMonths[0]}–${simulatorMonths[simulatorMonths.length - 1]}`}
-        className="col-span-12 flex flex-col xl:col-span-8"
+        className="flex min-w-0 flex-col"
       >
         <ChartLegend
           textSize="text-[13px]"
