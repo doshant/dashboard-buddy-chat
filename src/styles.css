@@ -230,6 +230,17 @@
   background: var(--color-card);
 }
 
+/* Panels in a chart row share the row's height. Their charts grow from their set height into any
+   spare room, so a panel with fewer bars doesn't leave a gap at the bottom. */
+.dashboard-chart-grid > .dashboard-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-chart-grid > .dashboard-panel > .dashboard-chart {
+  flex: 1 0 auto;
+}
+
 /* Compact tables in assistant replies so they fit the panel without scrolling. */
 .chat-transcript [data-streamdown="table-wrapper"] {
   margin-block: 0.5rem;

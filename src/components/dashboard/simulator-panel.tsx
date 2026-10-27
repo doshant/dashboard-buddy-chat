@@ -115,7 +115,7 @@ function Simulator({ baseline, geography }: { baseline: SimulatorBaseline; geogr
             value={levers.referralToPaidPct}
             display={`${levers.referralToPaidPct}%`}
             delta={levers.referralToPaidPct - base.referralToPaidPct}
-            unit=" pts"
+            unit="%"
             baseline={`${base.referralToPaidPct}% of known referral outcomes start on paid drug`}
             rule="New paid patients scale with the conversion rate"
             range={ranges.referralToPaidPct}
@@ -254,9 +254,8 @@ function Simulator({ baseline, geography }: { baseline: SimulatorBaseline; geogr
           />
         </div>
         <p className="mt-2 text-[11px] text-muted-foreground">
-          Rule-based demo estimates, not a forecast. Current trajectory carries the last three
-          months' trend forward; levers add or remove paid doses at ${netPerVial / 1000}k net per
-          vial.
+          Current trajectory carries the last three months' trend forward; levers add or remove
+          paid doses at ${netPerVial / 1000}k net per vial.
         </p>
       </DashboardPanel>
     </section>

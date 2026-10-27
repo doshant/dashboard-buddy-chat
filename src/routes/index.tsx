@@ -135,6 +135,9 @@ const popupWidthDefault = 520;
 const chatWidthMin = 320;
 
 // Assistant reply tables: resizable column headers; values centred, text left-aligned.
+// Side gutters between the window edge and the dashboard panels.
+const pageGutter = "px-3 sm:px-5 xl:px-7";
+
 const chatTableComponents = {
   th: ResizableHeaderCell,
   td: ChatTableCell,
@@ -469,17 +472,18 @@ function LaunchTracker() {
     if (question) sendQuestion(question);
   }
 
+  // The docked assistant takes its width from the right of the page; the dashboard and the tab
+  // bar fit beside it, so the tabs line up with the panels above them.
+  const besideAssistant = docked
+    ? { paddingRight: chatOpen ? dockedPaneWidth : `${collapsedRailWidth}px` }
+    : undefined;
+
   return (
     <main
       className="min-h-screen bg-background font-dashboard text-foreground"
-      // The docked assistant takes its width from the right of the page; the dashboard fits beside it.
-      style={
-        docked
-          ? { paddingRight: chatOpen ? dockedPaneWidth : `${collapsedRailWidth}px` }
-          : undefined
-      }
+      style={besideAssistant}
     >
-      <div className="mx-auto min-h-screen max-w-[1800px] px-3 pb-36 pt-4 sm:px-5 sm:pt-5 xl:px-7">
+      <div className={`mx-auto min-h-screen max-w-[1800px] pb-36 pt-4 sm:pt-5 ${pageGutter}`}>
         <header className="mb-5 flex flex-wrap items-center justify-between gap-x-7 gap-y-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="grid size-9 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground">
@@ -582,28 +586,44 @@ function LaunchTracker() {
 
       <nav
         aria-label="Dashboard navigation"
-        className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-card/95 px-3 backdrop-blur-md sm:px-6"
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-card/95 backdrop-blur-md"
       >
-        <div className="mx-auto flex h-[64px] max-w-[1800px] items-center gap-1 overflow-x-auto">
-          {visiblePanels.map(({ label, icon: Icon, Content }) => (
-            <Button
-              key={label}
-              type="button"
-              variant="ghost"
-              onClick={() => setActivePanel(label)}
-              aria-current={panel.label === label ? "page" : undefined}
-              className={`h-full shrink-0 rounded-none border-b-2 px-3 text-xs sm:px-5 ${panel.label === label ? "border-primary bg-secondary/60 font-semibold text-primary" : "border-transparent text-muted-foreground"}`}
-            >
-              <Icon size={16} />
-              <span>{label}</span>
-              {!Content && <span className="sr-only">, placeholder</span>}
-            </Button>
-          ))}
-          <div className="ml-auto hidden items-center gap-2 pr-2 text-[11px] text-muted-foreground sm:flex">
-            <span className="size-2 rounded-full bg-series-2" />
-            Demo data · {profile.name} · {geographyName} ·{" "}
-            {timePeriod === "Monthly" ? month : timePeriod}
+        {/* The tabs line up with the panels, beside the assistant; the status sits at the far right. */}
+        <div style={besideAssistant}>
+          <div
+            className={`mx-auto flex h-[64px] max-w-[1800px] items-center gap-1 overflow-x-auto ${pageGutter}`}
+          >
+            {visiblePanels.map(({ label, icon: Icon, Content }) => (
+              <Button
+                key={label}
+                type="button"
+                variant="ghost"
+                onClick={() => setActivePanel(label)}
+                aria-current={panel.label === label ? "page" : undefined}
+                className={`h-full shrink-0 rounded-none border-b-2 px-3 text-xs sm:px-5 ${panel.label === label ? "border-primary bg-secondary/60 font-semibold text-primary" : "border-transparent text-muted-foreground"}`}
+              >
+                <Icon size={16} />
+                {/* The bold copy reserves the active label's width, so tabs don't shift when selected. */}
+                <span className="grid">
+                  <span
+                    aria-hidden="true"
+                    className="invisible col-start-1 row-start-1 font-semibold"
+                  >
+                    {label}
+                  </span>
+                  <span className="col-start-1 row-start-1">{label}</span>
+                </span>
+                {!Content && <span className="sr-only">, placeholder</span>}
+              </Button>
+            ))}
           </div>
+        </div>
+        <div
+          className={`absolute inset-y-0 right-0 hidden items-center gap-2 text-[11px] text-muted-foreground lg:flex ${pageGutter}`}
+        >
+          <span className="size-2 rounded-full bg-series-2" />
+          Demo data · {profile.name} · {geographyName} ·{" "}
+          {timePeriod === "Monthly" ? month : timePeriod}
         </div>
       </nav>
 

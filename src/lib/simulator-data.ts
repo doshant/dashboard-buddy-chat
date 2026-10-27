@@ -55,12 +55,10 @@ export function simulatorBaseline({ launch, marketAccess }: DashboardData) {
 export type SimulatorBaseline = ReturnType<typeof simulatorBaseline>;
 
 // Slider ranges around the baseline, so every geography's starting point sits inside them.
+// Referral → Paid is a share of referrals, so it spans the full 0–100%.
 export function leverRanges({ levers }: SimulatorBaseline) {
   return {
-    referralToPaidPct: {
-      min: Math.max(0, levers.referralToPaidPct - 25),
-      max: Math.min(100, levers.referralToPaidPct + 25),
-    },
+    referralToPaidPct: { min: 0, max: 100 },
     paDays: { min: Math.max(1, levers.paDays - 10), max: levers.paDays + 15 },
     firstDoseDays: {
       min: Math.max(1, levers.paDays - 10) + simulatorRules.minSchedulingDays,
@@ -171,7 +169,7 @@ export function simulatorPresets(baseline: SimulatorBaseline) {
       levers: { ...base, oopPerDose: Math.round((base.oopPerDose * 0.8) / 5) * 5 },
     },
     {
-      label: "Referral → Paid +10 pts",
+      label: "Referral → Paid +10%",
       levers: {
         ...base,
         referralToPaidPct: Math.min(ranges.referralToPaidPct.max, base.referralToPaidPct + 10),
