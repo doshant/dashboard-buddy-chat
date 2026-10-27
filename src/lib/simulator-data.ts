@@ -335,28 +335,30 @@ export function whatIfAnswer(
   const { levers } = parsed;
   const result = simulate(baseline, levers);
   const moved = (Object.keys(base) as LeverKey[]).filter((key) => levers[key] !== base[key]);
-  const scenario = moved.length
-    ? moved
-        .map(
-          (key) =>
-            `${leverNames[key]} ${leverValue(key, base[key])} → ${leverValue(key, levers[key])}`,
-        )
-        .join(", ")
-    : "No change from today";
   const delta = result.deltaNetSalesM;
-  const headline =
-    delta === 0
-      ? `**This scenario doesn't change projected net sales** over the next 6 months (${simulatorMonths[0]}–${simulatorMonths[simulatorMonths.length - 1]}).`
-      : `**${delta > 0 ? "Adds" : "Loses"} about $${Math.abs(delta).toFixed(1)}M in net sales over the next 6 months** (${simulatorMonths[0]}–${simulatorMonths[simulatorMonths.length - 1]}), ${result.incrementalPatients >= 0 ? "from" : "with"} ${Math.abs(result.incrementalPatients)} ${result.incrementalPatients >= 0 ? "more" : "fewer"} paid patients.`;
+  const patients = result.incrementalPatients;
+  const horizon = `${simulatorMonths[0]}–${simulatorMonths[simulatorMonths.length - 1]}`;
 
+  // Short headlines with one fact per sub-point, the same shape as the other answers.
   const bullets = [
-    `- ${headline}`,
-    `- Scenario${where === "National" ? "" : ` (${where})`}: ${scenario}.`,
-    `- New paid patients a month go from ${result.baselinePaidStartsPerMonth} to ${result.paidStartsPerMonth}; effective Referral → Paid from ${base.referralToPaidPct}% to ${result.effectiveReferralToPaidPct}%.`,
+    delta === 0
+      ? `- **No change to projected net sales** (${horizon})`
+      : `- **${delta > 0 ? "Adds" : "Loses"} about $${Math.abs(delta).toFixed(1)}M in net sales** (${horizon})`,
+    `  - ${Math.abs(patients)} ${patients >= 0 ? "more" : "fewer"} paid patients over 6 months`,
+    `  - New paid patients a month: ${result.baselinePaidStartsPerMonth} → ${result.paidStartsPerMonth}`,
+    `  - Effective Referral → Paid: ${base.referralToPaidPct}% → ${result.effectiveReferralToPaidPct}%`,
+    `- **Scenario${where === "National" ? "" : `, ${where}`}**`,
+    ...(moved.length
+      ? moved.map(
+          (key) =>
+            `  - ${leverNames[key]}: ${leverValue(key, base[key])} → ${leverValue(key, levers[key])}`,
+        )
+      : ["  - No change from today"]),
   ];
   if (result.copayRoi !== null) {
     bullets.push(
-      `- The out-of-pocket cut costs about $${(result.copaySupportCost / 1000).toFixed(1)}k in copay support, returning about ${Math.round(result.copayRoi)}x in net sales.`,
+      `- **Copay support: about $${(result.copaySupportCost / 1000).toFixed(1)}k**`,
+      `  - Returns about ${Math.round(result.copayRoi)}x in net sales`,
     );
   }
   const row = (label: string, today: string, scenarioValue: string) =>

@@ -27,6 +27,13 @@ import {
   type SimulatorLevers,
 } from "@/lib/simulator-data";
 
+// The simulator's chart is the page's centrepiece, so its labels are larger than other tabs'.
+const chartTick = { ...axisTick, fontSize: 13 };
+const chartTooltip = {
+  ...tooltipProps,
+  contentStyle: { ...tooltipProps.contentStyle, fontSize: 13 },
+};
+
 const money = (valueM: number) => `${valueM < 0 ? "−" : "+"}$${Math.abs(valueM).toFixed(1)}M`;
 const signed = (value: number, unit = "") =>
   `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(value)}${unit}`;
@@ -66,11 +73,15 @@ function Simulator({ baseline, geography }: { baseline: SimulatorBaseline; geogr
   const where = geography === "Nation" ? "National" : geography;
 
   return (
-    <section aria-label="What-if simulator" className="grid grid-cols-12 gap-4">
+    // On wide screens the two panes fill the height between the header and the tab bar.
+    <section
+      aria-label="What-if simulator"
+      className="grid grid-cols-12 gap-4 xl:min-h-[calc(100dvh-11.5rem)]"
+    >
       <DashboardPanel
         title="Assumptions"
         subtitle={`${where} launch-to-date figures are the starting point`}
-        className="col-span-12 xl:col-span-4"
+        className="col-span-12 flex flex-col xl:col-span-4"
         action={
           <button
             type="button"
@@ -96,7 +107,8 @@ function Simulator({ baseline, geography }: { baseline: SimulatorBaseline; geogr
           ))}
         </div>
 
-        <div className="grid gap-5">
+        {/* Four equal rows, so the levers share the pane height evenly. */}
+        <div className="grid flex-1 auto-rows-fr gap-3">
           <Lever
             label="Referral → Paid"
             value={levers.referralToPaidPct}
@@ -157,28 +169,29 @@ function Simulator({ baseline, geography }: { baseline: SimulatorBaseline; geogr
       <DashboardPanel
         title="Projected Net Sales: Current vs Simulated"
         subtitle={`${where} · $M a month · actual Jul–Sep, projected ${simulatorMonths[0]}–${simulatorMonths[simulatorMonths.length - 1]}`}
-        className="col-span-12 xl:col-span-8"
+        className="col-span-12 flex flex-col xl:col-span-8"
       >
         <ChartLegend
+          textSize="text-[13px]"
           items={[
             { label: "Current trajectory", className: "bg-target" },
             { label: "Simulated", className: "bg-series-1" },
           ]}
         />
-        <div className="h-72">
+        <div className="min-h-72 flex-1">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={result.chart} margin={{ top: 12, right: 16, bottom: 0, left: -8 }}>
+            <LineChart data={result.chart} margin={{ top: 16, right: 20, bottom: 4, left: 0 }}>
               <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 4" />
-              <XAxis dataKey="month" tick={axisTick} tickLine={false} axisLine={false} />
+              <XAxis dataKey="month" tick={chartTick} tickLine={false} axisLine={false} />
               <YAxis
-                tick={axisTick}
+                tick={chartTick}
                 tickLine={false}
                 axisLine={false}
                 tickFormatter={(value: number) => `$${value}M`}
                 domain={[0, "auto"]}
               />
               <Tooltip
-                {...tooltipProps}
+                {...chartTooltip}
                 cursor={{ stroke: "var(--color-border)" }}
                 formatter={(value) => `$${Number(value).toFixed(2)}M`}
               />
@@ -186,7 +199,7 @@ function Simulator({ baseline, geography }: { baseline: SimulatorBaseline; geogr
                 x="Sep"
                 stroke="var(--color-muted-foreground)"
                 strokeDasharray="2 3"
-                label={{ value: "Projected →", position: "insideTopRight", ...axisTick }}
+                label={{ value: "Projected →", position: "insideTopRight", ...chartTick }}
               />
               <Line
                 dataKey="current"
@@ -273,7 +286,7 @@ function Lever({
   onChange: (value: number) => void;
 }) {
   return (
-    <div className="grid gap-2">
+    <div className="flex flex-col justify-center gap-2 rounded-lg border border-border bg-secondary/30 px-3.5 py-3">
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-xs font-semibold">{label}</span>
         <span className="text-xs tabular-nums">

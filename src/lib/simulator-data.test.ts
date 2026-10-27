@@ -148,6 +148,6 @@ describe("What-If Simulator", () => {
       expect(whatIf.answer.suggestions).not.toContain(question);
     }
     const southeast = whatIfFor("What if out-of-pocket cost is 20% lower?", "Southeast")!;
-    expect(southeast.answer.response).toContain("(Southeast)");
+    expect(southeast.answer.response).toContain("**Scenario, Southeast**");
   });
 });

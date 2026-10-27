@@ -73,10 +73,13 @@ describe("Live assistant data", () => {
   });
 
   it("asks for the existing answer style, access message and wording rules", () => {
-    expect(assistantInstructions).toContain("Open with two or three short markdown bullets");
+    expect(assistantInstructions).toContain(
+      "Open with two or three key points as markdown bullets",
+    );
     expect(assistantInstructions).toContain("isn't part of your access");
     expect(assistantInstructions).toContain('Never write "neurologist"');
-    expect(assistantInstructions).toContain("| **Total** | **80** | **143** |");
+    expect(assistantInstructions).toContain("| **Total Q3 denials** | **10** | **100%** |");
+    expect(assistantInstructions).toContain("end with it as a markdown blockquote");
   });
 
   it("calls Claude Opus 5.5 with the data cached after the instructions", () => {

@@ -44,7 +44,13 @@ export function Sparkline({
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   });
   return (
-    <svg viewBox="0 0 100 28" preserveAspectRatio="none" role="img" aria-label={label} className={`shrink-0 overflow-visible ${className}`}>
+    <svg
+      viewBox="0 0 100 28"
+      preserveAspectRatio="none"
+      role="img"
+      aria-label={label}
+      className={`shrink-0 overflow-visible ${className}`}
+    >
       <polygon points={`0,28 ${points.join(" ")} 100,28`} fill={color} opacity={0.1} />
       <polyline
         points={points.join(" ")}
@@ -134,9 +140,17 @@ export function DashboardPanel({
   );
 }
 
-export function ChartLegend({ items }: { items: { label: string; className: string }[] }) {
+export function ChartLegend({
+  items,
+  textSize = "text-[10px]",
+}: {
+  items: { label: string; className: string }[];
+  textSize?: string;
+}) {
   return (
-    <div className="flex min-h-4 flex-wrap items-center justify-center gap-x-2.5 gap-y-1 text-[10px] text-muted-foreground">
+    <div
+      className={`flex min-h-4 flex-wrap items-center justify-center gap-x-2.5 gap-y-1 ${textSize} text-muted-foreground`}
+    >
       {items.map((item) => (
         <span key={item.label} className="inline-flex items-center gap-1">
           <span className={`size-2 rounded-full ${item.className}`} />

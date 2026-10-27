@@ -41,6 +41,7 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input";
+import { ChatSuggestion } from "@/components/chat-suggestion";
 import { ChatTableCell, ResizableHeaderCell } from "@/components/chat-table";
 import { DashboardDataProvider } from "@/components/dashboard/dashboard-data-context";
 import { ExecutivePanel } from "@/components/dashboard/executive-panel";
@@ -134,7 +135,11 @@ const popupWidthDefault = 520;
 const chatWidthMin = 320;
 
 // Assistant reply tables: resizable column headers; values centred, text left-aligned.
-const chatTableComponents = { th: ResizableHeaderCell, td: ChatTableCell };
+const chatTableComponents = {
+  th: ResizableHeaderCell,
+  td: ChatTableCell,
+  blockquote: ChatSuggestion,
+};
 
 // Live answers stream from Claude. Preset (fallback) replies are "thought about" for at least
 // this long, then typed out a word at a time.
