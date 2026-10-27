@@ -16,6 +16,7 @@ import { executiveTargets } from "@/lib/executive-data";
 import { engagementFunnel, fieldByMonth, fieldRegionalSummary } from "@/lib/field-data";
 import {
   marketAccessKpis,
+  paAnalysis,
   restarts,
   stopReasons,
   stops,
@@ -367,6 +368,19 @@ export const repeatActions = {
 export type AttentionSignal = { panel: PanelLabel; question: string; reason: string };
 
 const signalRules: (AttentionSignal & { active: boolean })[] = [
+  // The Market Access story: first-pass PA denials. Flagged first on both tabs that show it.
+  {
+    panel: "Executive Summary",
+    active: paAnalysis.firstPassQ3 < paAnalysis.firstPassH1 - 10,
+    question: forwardQuestion("paDenials"),
+    reason: `First-pass PA approval fell from ${paAnalysis.firstPassH1}% in H1 to ${paAnalysis.firstPassQ3}% in Q3`,
+  },
+  {
+    panel: "Market Access",
+    active: paAnalysis.firstPassQ3 < paAnalysis.firstPassH1 - 10,
+    question: forwardQuestion("paDenials"),
+    reason: `First-pass PA approval fell from ${paAnalysis.firstPassH1}% in H1 to ${paAnalysis.firstPassQ3}% in Q3`,
+  },
   {
     panel: "Executive Summary",
     active: kpis.netSales.attainmentPct < 100,

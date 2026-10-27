@@ -80,11 +80,12 @@ describe("Market Access control totals", () => {
     const answers = starterQuestionsFor("Market Access").map(
       (question) => resolveDashboardAnswer(question).response,
     );
-    expect(answers).toHaveLength(5);
+    expect(answers).toHaveLength(6);
     expect(answers[0]).toContain("95%");
-    expect(answers[1]).toContain("29 days");
-    expect(answers[2]).toContain("143 paid doses");
-    expect(answers[3]).toContain("62 remain active");
-    expect(answers[4]).toContain("23 vials");
+    expect(answers[1]).toContain("8 of 10 Q3 denials");
+    expect(answers[2]).toContain("29 days");
+    expect(answers[3]).toContain("143 paid doses");
+    expect(answers[4]).toContain("62 remain active");
+    expect(answers[5]).toContain("23 vials");
   });
 });

@@ -27,6 +27,13 @@ describe("Assistant reply tables", () => {
     expect(alignOf("Medicare FFS")).toBe("left");
     expect(alignOf("22")).toBe("center");
     expect(alignOf("52")).toBe("center");
+    // Text wraps; values stay on one line.
+    const kindOf = (text: string) =>
+      screen.getByText(text).closest("th, td")?.getAttribute("data-kind");
+    expect(kindOf("Medicare FFS")).toBe("text");
+    expect(kindOf("Payer")).toBe("text");
+    expect(kindOf("52")).toBe("value");
+    expect(kindOf("Referred patients")).toBe("value");
   });
 
   it("centres values even in columns not marked as numeric", () => {

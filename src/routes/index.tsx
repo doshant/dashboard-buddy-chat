@@ -18,12 +18,14 @@ import {
   Download,
   FileSpreadsheet,
   FileText,
-  Info,
   LayoutDashboard,
   Lock,
   MapPinned,
+  SlidersHorizontal,
   Megaphone,
   MessageCircle,
+  PanelRightClose,
+  PanelRightOpen,
   RotateCcw,
   Send,
   ShieldCheck,
@@ -43,6 +45,7 @@ import { ChatTableCell, ResizableHeaderCell } from "@/components/chat-table";
 import { DashboardDataProvider } from "@/components/dashboard/dashboard-data-context";
 import { ExecutivePanel } from "@/components/dashboard/executive-panel";
 import { FieldPanel } from "@/components/dashboard/field-panel";
+import { SimulatorLeversContext, SimulatorPanel } from "@/components/dashboard/simulator-panel";
 import { MarketAccessPanel } from "@/components/dashboard/market-access-panel";
 import { MarketingPanel } from "@/components/dashboard/marketing-panel";
 import { OverviewPanel } from "@/components/dashboard/overview-panel";
@@ -73,6 +76,7 @@ import {
 } from "@/lib/dashboard-data";
 import { attentionSignalsFor } from "@/lib/outlook-data";
 import { buildDashboardData } from "@/lib/scoped-data";
+import { whatIfFor, type SimulatorLevers } from "@/lib/simulator-data";
 import {
   latestMonth,
   monthNames,
@@ -119,10 +123,15 @@ type ChatMessage = {
 // Earlier turns sent with each question so Claude can follow up on them.
 const chatHistoryTurns = 10;
 
-// The assistant can be dragged wider from its left edge; it reopens at the default width.
-const chatWidthDefault = 520;
-const chatWidthMin = 380;
-const chatWidthMax = 960;
+// On wide screens the assistant is a pane docked to the right: a quarter of the screen by default
+// (at least 320px), draggable from its left edge up to half the screen, and collapsible to a
+// slim rail. On narrow screens it is a pop-up opened from a button. Either way it reopens at the
+// default width.
+const dockedQuery = "(min-width: 1024px)";
+const dockedWidthDefault = "max(320px, 25vw)";
+const collapsedRailWidth = 48;
+const popupWidthDefault = 520;
+const chatWidthMin = 320;
 
 // Assistant reply tables: resizable column headers; values centred, text left-aligned.
 const chatTableComponents = { th: ResizableHeaderCell, td: ChatTableCell };
@@ -136,9 +145,10 @@ function wordEnds(text: string) {
   return Array.from(text.matchAll(/\S+\s*/g), (match) => match.index + match[0].length);
 }
 
-function clampChatWidth(width: number) {
-  const viewportMax = typeof window === "undefined" ? chatWidthMax : window.innerWidth - 48;
-  return Math.round(Math.max(chatWidthMin, Math.min(width, chatWidthMax, viewportMax)));
+function clampChatWidth(width: number, docked: boolean) {
+  const viewport = typeof window === "undefined" ? 1440 : window.innerWidth;
+  const max = docked ? viewport * 0.5 : viewport - 48;
+  return Math.round(Math.max(chatWidthMin, Math.min(width, max)));
 }
 
 // `hidden` keeps a tab's page and data in the app but leaves it out of the tab bar.
@@ -161,6 +171,12 @@ const panels: {
   { label: "Market Access", icon: ShieldCheck, Content: MarketAccessPanel },
   { label: "Marketing", icon: Megaphone, Content: MarketingPanel },
   { label: "Field Activity", icon: MapPinned, Content: FieldPanel },
+  {
+    label: "What-If Simulator",
+    icon: SlidersHorizontal,
+    Content: SimulatorPanel,
+    filters: { geography: true, period: false },
+  },
 ];
 
 function LaunchTracker() {
@@ -178,11 +194,35 @@ function LaunchTracker() {
       }),
     [geographyName, timePeriod, month],
   );
+  // What-If Simulator levers; null means today's values. A new geography starts over.
+  const [simulatorLevers, setSimulatorLevers] = useState<SimulatorLevers | null>(null);
+  const simulatorState = useMemo(
+    () => ({ levers: simulatorLevers, setLevers: setSimulatorLevers }),
+    [simulatorLevers],
+  );
+  useEffect(() => setSimulatorLevers(null), [geographyName]);
   const [profileId, setProfileId] = useState(profiles[0]!.id);
   const [activePanel, setActivePanel] = useState<PanelLabel>("Executive Summary");
-  const [chatOpen, setChatOpen] = useState(false);
+  // Wide screens start with the assistant docked open; narrow screens start with it closed.
+  const [docked, setDocked] = useState(true);
+  const [chatOpen, setChatOpen] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [chatWidth, setChatWidth] = useState(chatWidthDefault);
+  // null means the default width; a number is a width the user dragged to, in pixels.
+  const [chatWidth, setChatWidth] = useState<number | null>(null);
+  const chatPaneRef = useRef<HTMLElement>(null);
+  const chatOpenedByUser = useRef(false);
+
+  useEffect(() => {
+    const query = window.matchMedia(dockedQuery);
+    setDocked(query.matches);
+    if (!query.matches) setChatOpen(false);
+    const update = () => {
+      setDocked(query.matches);
+      setChatWidth(null);
+    };
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
   // Whether the server answers live (Claude Code locally, or the Claude API) or with presets.
   const [assistantMode, setAssistantMode] = useState<"unknown" | "live" | "preset">("unknown");
 
@@ -216,18 +256,25 @@ function LaunchTracker() {
   );
 
   function resizeChat(width: number) {
-    setChatWidth(clampChatWidth(width));
+    setChatWidth(clampChatWidth(width, docked));
+  }
+
+  const currentChatWidth = () => chatWidth ?? chatPaneRef.current?.offsetWidth ?? popupWidthDefault;
+
+  function openChat() {
+    chatOpenedByUser.current = true;
+    setChatOpen(true);
   }
 
   function closeChat() {
     setChatOpen(false);
-    setChatWidth(chatWidthDefault);
+    setChatWidth(null);
   }
 
   function startChatResize(event: ReactPointerEvent<HTMLDivElement>) {
     event.preventDefault();
     const startX = event.clientX;
-    const startWidth = chatWidth;
+    const startWidth = currentChatWidth();
     const onMove = (move: PointerEvent) => resizeChat(startWidth + startX - move.clientX);
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
@@ -241,16 +288,20 @@ function LaunchTracker() {
   }
 
   function handleChatResizeKey(event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (event.key === "ArrowLeft") resizeChat(chatWidth + 40);
-    else if (event.key === "ArrowRight") resizeChat(chatWidth - 40);
+    if (event.key === "ArrowLeft") resizeChat(currentChatWidth() + 40);
+    else if (event.key === "ArrowRight") resizeChat(currentChatWidth() - 40);
     else return;
     event.preventDefault();
   }
 
+  // Focus the question box when the user opens the assistant or a reply arrives, but not when the
+  // docked pane simply appears on page load.
   useEffect(() => {
-    if (!chatOpen) return;
+    if (!chatOpen || (!chatOpenedByUser.current && messages.length === 0)) return;
     textareaRef.current?.focus();
   }, [chatOpen, messages.length]);
+
+  const dockedPaneWidth = chatWidth === null ? dockedWidthDefault : `min(${chatWidth}px, 50vw)`;
 
   const profile = profiles.find((item) => item.id === profileId) ?? profiles[0]!;
   const shownPanels = panels.filter((item) => !item.hidden);
@@ -357,9 +408,14 @@ function LaunchTracker() {
 
   function sendQuestion(question: string) {
     finishReply();
+    // A what-if question sets the simulator's sliders and is answered from the same model, so the
+    // reply always matches the tab.
+    const whatIf = profile.panels.includes("What-If Simulator")
+      ? whatIfFor(question, geographyName as Geography)
+      : null;
     // The preset answer supplies the download title and follow-up suggestions, and is the
     // fallback text when no live answer is available.
-    const preset = resolveDashboardAnswer(question, profile.panels);
+    const preset = whatIf?.answer ?? resolveDashboardAnswer(question, profile.panels);
     const id = Date.now();
     const replyId = id + 1;
     const earlier = messages
@@ -383,6 +439,12 @@ function LaunchTracker() {
     setReply({ id: replyId, shown: 0 });
 
     const startedAt = Date.now();
+    if (whatIf) {
+      setSimulatorLevers(whatIf.levers);
+      setActivePanel("What-If Simulator");
+      showPresetAnswer(replyId, preset.response, startedAt, false);
+      return;
+    }
     if (assistantMode === "preset") {
       showPresetAnswer(replyId, preset.response, startedAt, false);
       return;
@@ -403,7 +465,15 @@ function LaunchTracker() {
   }
 
   return (
-    <main className="min-h-screen bg-background font-dashboard text-foreground">
+    <main
+      className="min-h-screen bg-background font-dashboard text-foreground"
+      // The docked assistant takes its width from the right of the page; the dashboard fits beside it.
+      style={
+        docked
+          ? { paddingRight: chatOpen ? dockedPaneWidth : `${collapsedRailWidth}px` }
+          : undefined
+      }
+    >
       <div className="mx-auto min-h-screen max-w-[1800px] px-3 pb-36 pt-4 sm:px-5 sm:pt-5 xl:px-7">
         <header className="mb-5 flex flex-wrap items-center justify-between gap-x-7 gap-y-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -480,31 +550,15 @@ function LaunchTracker() {
                 onChange={(value) => setMonth(value as MonthName)}
               />
             )}
-            <div className="ml-1 hidden items-center gap-3 border-l border-border pl-4 sm:flex">
-              <span
-                role="img"
-                aria-label="AUXO"
-                className="grid size-7 place-items-center rounded-md bg-primary text-xs font-bold text-primary-foreground"
-              >
-                X
-              </span>
-            </div>
             <ProfileSwitcher activeId={profile.id} onSwitch={switchProfile} />
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="About this dashboard"
-              title="About this dashboard"
-              className="hidden text-brand-bright-blue sm:inline-flex"
-            >
-              <Info size={20} />
-            </Button>
           </div>
         </header>
 
         {panel.Content ? (
           <DashboardDataProvider value={dashboardData}>
-            <panel.Content />
+            <SimulatorLeversContext.Provider value={simulatorState}>
+              <panel.Content />
+            </SimulatorLeversContext.Provider>
           </DashboardDataProvider>
         ) : (
           <section className="dashboard-panel flex min-h-[420px] flex-col items-center justify-center gap-4 px-6 text-center">
@@ -550,21 +604,29 @@ function LaunchTracker() {
 
       {chatOpen ? (
         <aside
+          ref={chatPaneRef}
           aria-label="Dashboard Assistant"
-          style={{ width: `min(${chatWidth}px, calc(100vw - 24px))` }}
-          className="fixed bottom-20 right-3 z-40 flex h-[min(690px,calc(100dvh-100px))] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl sm:right-6"
+          style={{
+            width: docked
+              ? dockedPaneWidth
+              : `min(${chatWidth ?? popupWidthDefault}px, calc(100vw - 24px))`,
+          }}
+          className={
+            docked
+              ? "fixed bottom-[64px] right-0 top-0 z-30 flex flex-col overflow-hidden border-l border-border bg-card"
+              : "fixed bottom-20 right-3 z-40 flex h-[min(690px,calc(100dvh-100px))] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl sm:right-6"
+          }
         >
           <div
             role="separator"
             aria-orientation="vertical"
             aria-label="Resize assistant"
-            aria-valuenow={chatWidth}
+            aria-valuenow={chatPaneRef.current?.offsetWidth ?? chatWidth ?? undefined}
             aria-valuemin={chatWidthMin}
-            aria-valuemax={chatWidthMax}
             title="Drag to resize · double-click to reset"
             tabIndex={0}
             onPointerDown={startChatResize}
-            onDoubleClick={() => resizeChat(chatWidthDefault)}
+            onDoubleClick={() => setChatWidth(null)}
             onKeyDown={handleChatResizeKey}
             className="absolute inset-y-0 left-0 z-10 hidden w-1.5 cursor-ew-resize transition-colors hover:bg-primary/30 focus-visible:bg-primary/30 focus-visible:outline-none sm:block"
           />
@@ -597,11 +659,11 @@ function LaunchTracker() {
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Close chat"
-                title="Close chat"
+                aria-label={docked ? "Collapse assistant" : "Close chat"}
+                title={docked ? "Collapse assistant" : "Close chat"}
                 onClick={closeChat}
               >
-                <X size={17} />
+                {docked ? <PanelRightClose size={17} /> : <X size={17} />}
               </Button>
             </div>
           </header>
@@ -711,10 +773,33 @@ function LaunchTracker() {
             </PromptInput>
           </div>
         </aside>
+      ) : docked ? (
+        <aside
+          aria-label="Dashboard Assistant (collapsed)"
+          style={{ width: collapsedRailWidth }}
+          className="fixed bottom-[64px] right-0 top-0 z-30 flex flex-col items-center gap-3 border-l border-border bg-card pt-4"
+        >
+          <Button
+            type="button"
+            size="icon"
+            onClick={openChat}
+            aria-label="Expand Dashboard Assistant"
+            title="Expand Dashboard Assistant"
+          >
+            <PanelRightOpen size={18} />
+          </Button>
+          <button
+            type="button"
+            onClick={openChat}
+            className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground [writing-mode:vertical-rl] hover:text-primary"
+          >
+            Dashboard Assistant
+          </button>
+        </aside>
       ) : (
         <Button
           type="button"
-          onClick={() => setChatOpen(true)}
+          onClick={openChat}
           aria-label="Open Dashboard Assistant"
           title="Open Dashboard Assistant"
           className="chat-launcher fixed bottom-20 z-30 size-12 rounded-full shadow-lg"
@@ -738,10 +823,12 @@ function ProfileSwitcher({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
+        {/* The header row aligns to the bottom of the 32px filter boxes; this 40px button is
+            nudged down 4px so its centre lines up with theirs. */}
         <button
           type="button"
           aria-label={`Signed in as ${active.name}. Switch profile`}
-          className="flex items-center gap-2.5 rounded-md py-1 pl-1 pr-2 text-left transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:border-l sm:border-border sm:pl-3"
+          className="-mb-1 flex items-center gap-2.5 rounded-md py-1 pl-1 pr-2 text-left transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:border-l sm:border-border sm:pl-3"
         >
           <span
             className="grid size-8 place-items-center rounded-full bg-secondary text-lg"

@@ -20,7 +20,11 @@ const fieldQuestion = "How many calls has the field team made?";
 describe("Demo profile access", () => {
   it("gives Jenny every tab, and Bob and Jeff the Executive Summary plus their own tab", () => {
     expect(byName("Jenny").panels).toEqual(panelLabels);
-    expect(byName("Bob").panels).toEqual(["Executive Summary", "Market Access"]);
+    expect(byName("Bob").panels).toEqual([
+      "Executive Summary",
+      "Market Access",
+      "What-If Simulator",
+    ]);
     expect(byName("Jeff").panels).toEqual(["Executive Summary", "Marketing"]);
   });
 
@@ -48,7 +52,7 @@ describe("Demo profile access", () => {
     const bob = byName("Bob").panels;
     expect(resolveDashboardAnswer(marketAccessQuestion, bob).response).toContain("95%");
     expect(resolveDashboardAnswer(fieldQuestion, bob).response).toBe(
-      "That question draws on Field Activity data, which isn't part of your access. You can ask about Executive Summary, Market Access.",
+      "That question draws on Field Activity data, which isn't part of your access. You can ask about Executive Summary, Market Access, What-If Simulator.",
     );
     expect(resolveDashboardAnswer(marketingQuestion, bob).response).not.toContain("67.4k");
 

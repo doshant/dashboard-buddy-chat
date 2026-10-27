@@ -60,7 +60,7 @@ describe("Live assistant data", () => {
     expect(jeff.marketAccess).toBeUndefined();
     expect(jeff.fieldActivity).toBeUndefined();
     expect(jeff.outlook.marketAccess).toBeUndefined();
-    expect(jeff.restrictedTabs).toEqual(["Market Access", "Field Activity"]);
+    expect(jeff.restrictedTabs).toEqual(["Market Access", "Field Activity", "What-If Simulator"]);
   });
 
   it("follows the selected geography and period", () => {
@@ -73,7 +73,7 @@ describe("Live assistant data", () => {
   });
 
   it("asks for the existing answer style, access message and wording rules", () => {
-    expect(assistantInstructions).toContain("Open with one sentence in bold");
+    expect(assistantInstructions).toContain("Open with two or three short markdown bullets");
     expect(assistantInstructions).toContain("isn't part of your access");
     expect(assistantInstructions).toContain('Never write "neurologist"');
     expect(assistantInstructions).toContain("| **Total** | **80** | **143** |");

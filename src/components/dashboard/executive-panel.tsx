@@ -166,6 +166,10 @@ function KpiCard({ group }: { group: KpiGroup }) {
   );
 }
 
+// The Insights summary at the top of the tab is hidden for now; set to true to show it again.
+// Its text is still built (and given to the assistant) either way.
+const showInsights = false;
+
 export function ExecutivePanel() {
   const [selected, setSelected] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<"status" | "channel">("status");
@@ -183,18 +187,20 @@ export function ExecutivePanel() {
 
   return (
     <>
-      <section aria-label="Insights" className="dashboard-panel mb-4 p-4">
-        <h2 className="text-sm font-bold text-primary">Insights</h2>
-        <p className="mt-1 text-sm font-semibold">{executiveInsights.headline}</p>
-        <ul className="mt-2 grid gap-1 text-[13px] leading-snug">
-          {executiveInsights.bullets.map((bullet) => (
-            <li key={bullet} className="flex gap-2">
-              <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-primary" />
-              {bullet}
-            </li>
-          ))}
-        </ul>
-      </section>
+      {showInsights && (
+        <section aria-label="Insights" className="dashboard-panel mb-4 p-4">
+          <h2 className="text-sm font-bold text-primary">Insights</h2>
+          <p className="mt-1 text-sm font-semibold">{executiveInsights.headline}</p>
+          <ul className="mt-2 grid gap-1 text-[13px] leading-snug">
+            {executiveInsights.bullets.map((bullet) => (
+              <li key={bullet} className="flex gap-2">
+                <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-primary" />
+                {bullet}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section aria-label="Launch health at a glance" className="mb-4">
         <div className="mb-2 flex items-baseline justify-between gap-3">

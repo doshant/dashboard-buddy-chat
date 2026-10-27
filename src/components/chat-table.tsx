@@ -128,8 +128,9 @@ export function ResizableHeaderCell({
     <th
       {...props}
       data-streamdown="table-header-cell"
+      data-kind={isValueColumn(style) ? "value" : "text"}
       style={{ ...style, textAlign: isValueColumn(style) ? "center" : "left" }}
-      className={cn("relative whitespace-nowrap px-4 py-2 text-sm font-semibold", className)}
+      className={cn("relative px-4 py-2 text-sm font-semibold", className)}
     >
       {children}
       <span
@@ -159,6 +160,7 @@ export function ChatTableCell({
     <td
       {...props}
       data-streamdown="table-cell"
+      data-kind={centred ? "value" : "text"}
       style={{ ...style, textAlign: centred ? "center" : "left" }}
       className={cn("px-4 py-2 text-sm", className)}
     >

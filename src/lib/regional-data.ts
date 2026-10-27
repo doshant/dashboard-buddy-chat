@@ -2,6 +2,7 @@ import { nationalReferralRaw, type ReferralRaw } from "@/lib/executive-data";
 import { fieldRegions, nationalFieldRaw, type FieldRaw } from "@/lib/field-data";
 import { nationalLaunchRaw, sum, type LaunchRaw } from "@/lib/launch-data";
 import { nationalMarketAccessRaw, type MarketAccessRaw } from "@/lib/market-access-data";
+import { paFunnel, paRawFor } from "@/lib/pa-data";
 import {
   nationalMarketingRaw,
   regions as marketingRegions,
@@ -65,23 +66,33 @@ function splitLaunch() {
   };
   const forecast = raw.monthlyVials.map((row) => splitAmount(row.forecastNetSales, patientWeights));
 
-  const eap = splitFlow(column(raw.newPatients, "eapTransition"), patientWeights);
-  const newToBrand = splitFlow(column(raw.newPatients, "newToBrand"), patientWeights);
-
-  // Funnel: first doses are the region's starts; each step above adds its share of the drop-off.
+  // Benefits verification and PA come from each region's own PA record (pa-data): every PA
+  // submitted is a patient who passed benefits verification, and approvals include appeals won.
   const f = raw.funnel;
-  const firstDose = byRegion((r) => sum(eap[r] ?? []) + sum(newToBrand[r] ?? []));
-  const paApproved = firstDose.map(
-    (v, r) => v + at(allocate(f.paApproved - f.firstDose, patientWeights), r),
-  );
-  const benefitsVerified = paApproved.map(
-    (v, r) => v + at(allocate(f.benefitsVerified - f.paApproved, patientWeights), r),
-  );
+  const paByRegion = regionNames.map((region) => paFunnel(paRawFor(region)));
+  const benefitsVerified = paByRegion.map((row) => row.submitted);
+  const paApproved = paByRegion.map((row) => row.approved);
+  // First doses split the national starts in proportion to approvals, so no region starts more
+  // patients than it approved; monthly starts then follow each region's first doses.
+  const firstDose = allocate(f.firstDose, paApproved);
   const referred = benefitsVerified.map(
     (v, r) => v + at(allocate(f.referred - f.benefitsVerified, patientWeights), r),
   );
   const secondDose = allocate(f.secondDose, firstDose);
   const maintenance = allocate(f.maintenance, secondDose);
+
+  const starts = splitFlow(
+    raw.newPatients.map((row) => row.eapTransition + row.newToBrand),
+    firstDose,
+  );
+  const startsByType = raw.newPatients.map((row, m) =>
+    cascade(
+      [row.eapTransition, row.newToBrand],
+      byRegion((r) => at(starts[r], m)),
+    ),
+  );
+  const eap = byRegion((r) => months.map((_, m) => at(startsByType[m]?.[0], r)));
+  const newToBrand = byRegion((r) => months.map((_, m) => at(startsByType[m]?.[1], r)));
 
   // Each funnel gap holds the step's pending patients plus those cancelled there.
   const nationalPending = raw.pendingByStep;
@@ -112,11 +123,24 @@ function splitLaunch() {
     f.referred - f.benefitsVerified - agingTotal(nationalPending.benefitsVerification),
     nationalPending.benefitsVerification,
   );
-  const pa = stepSplit(
-    benefitsVerified.map((v, r) => v - at(paApproved, r)),
-    f.benefitsVerified - f.paApproved - agingTotal(nationalPending.priorAuthorization),
-    nationalPending.priorAuthorization,
+  // PA: pending patients (awaiting a decision or an appeal) and upheld denials come from the record.
+  const paPending = paByRegion.map((row) => row.pending);
+  const [paD0to14, paD15to30, paD31plus] = cascade(
+    [
+      nationalPending.priorAuthorization.d0to14,
+      nationalPending.priorAuthorization.d15to30,
+      nationalPending.priorAuthorization.d31plus,
+    ],
+    paPending,
   );
+  const pa = {
+    cancelled: paByRegion.map((row) => row.cancelled),
+    aging: byRegion((r) => ({
+      d0to14: at(paD0to14, r),
+      d15to30: at(paD15to30, r),
+      d31plus: at(paD31plus, r),
+    })),
+  };
   const lp = stepSplit(
     paApproved.map((v, r) => v - at(firstDose, r)),
     f.paApproved - f.firstDose - agingTotal(nationalPending.lpScheduling),
@@ -304,6 +328,7 @@ function splitMarketAccess(launch: ReturnType<typeof splitLaunch>) {
       },
       ...(siteFor(r) ? [siteFor(r)!] : []),
     ],
+    pa: paRawFor(regionNames[r]!),
   }));
   void regionsLaunch;
   return { regions, adminSinceLaunch };

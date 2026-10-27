@@ -36,16 +36,35 @@ export const panelLabels = [
   "Market Access",
   "Marketing",
   "Field Activity",
+  "What-If Simulator",
 ] as const;
 
 export type PanelLabel = (typeof panelLabels)[number];
 
 // Demo profiles simulating role-based access: each sees only its permitted tabs.
 // Every profile gets the Executive Summary alongside its own tabs.
-export const profiles: { id: string; name: string; role: string; avatar: string; panels: readonly PanelLabel[] }[] = [
+export const profiles: {
+  id: string;
+  name: string;
+  role: string;
+  avatar: string;
+  panels: readonly PanelLabel[];
+}[] = [
   { id: "jenny", name: "Jenny", role: "Brand Director", avatar: "👩🏻‍💼", panels: panelLabels },
-  { id: "bob", name: "Bob", role: "Market Access Lead", avatar: "👨🏽‍💼", panels: ["Executive Summary", "Market Access"] },
-  { id: "jeff", name: "Jeff", role: "Marketing Manager", avatar: "🧑🏼‍💼", panels: ["Executive Summary", "Marketing"] },
+  {
+    id: "bob",
+    name: "Bob",
+    role: "Market Access Lead",
+    avatar: "👨🏽‍💼",
+    panels: ["Executive Summary", "Market Access", "What-If Simulator"],
+  },
+  {
+    id: "jeff",
+    name: "Jeff",
+    role: "Marketing Manager",
+    avatar: "🧑🏼‍💼",
+    panels: ["Executive Summary", "Marketing"],
+  },
 ];
 
 export function accessSummary(panels: readonly PanelLabel[]) {
@@ -72,6 +91,7 @@ const starterQuestionsByPanel: Partial<Record<PanelLabel, string[]>> = {
   ],
   "Market Access": [
     "What is our PA approval rate?",
+    "Which sites are driving PA denials?",
     "How long does it take to get to first dose?",
     "What does the payer mix look like?",
     "Why are patients stopping therapy?",
@@ -91,6 +111,13 @@ const starterQuestionsByPanel: Partial<Record<PanelLabel, string[]>> = {
     "How are HCPs moving through the engagement funnel?",
     "Which region has the best HCP reach?",
   ],
+  // What-if questions set the simulator's sliders (see whatIfFor in simulator-data).
+  "What-If Simulator": [
+    "What if out-of-pocket cost is 20% lower?",
+    "What if PA approval is 5 days faster?",
+    "What if Referral → Paid rises to 65%?",
+    "What if we cut out-of-pocket by 10% and PA is 3 days faster?",
+  ],
 };
 
 export type QuestionKind = "Descriptive" | "Predictive" | "Prescriptive";
@@ -98,12 +125,20 @@ export type QuestionKind = "Descriptive" | "Predictive" | "Prescriptive";
 // Forward-looking questions: what is likely to happen (predictive) and what to do about it
 // (prescriptive). They aren't offered up front; they follow the descriptive answers they build on.
 const forwardQuestions = {
+  paDenials: { kind: "Prescriptive", question: "Why is our PA approval rate dropping?" },
+  paDenialActions: { kind: "Prescriptive", question: "What can we do about PA denials?" },
   salesOutlook: { kind: "Predictive", question: "What will net sales be by year end?" },
   salesActions: { kind: "Prescriptive", question: "What should we do to close the sales gap?" },
   salesMilestone: { kind: "Predictive", question: "When will monthly net sales pass $5M?" },
   activeOutlook: { kind: "Predictive", question: "How many patients will be active by December?" },
-  freeToPaidActions: { kind: "Prescriptive", question: "How can we move free-goods patients to paid?" },
-  over30Actions: { kind: "Prescriptive", question: "What should we do about patients waiting over 30 days?" },
+  freeToPaidActions: {
+    kind: "Prescriptive",
+    question: "How can we move free-goods patients to paid?",
+  },
+  over30Actions: {
+    kind: "Prescriptive",
+    question: "What should we do about patients waiting over 30 days?",
+  },
   supplyOutlook: { kind: "Predictive", question: "How many vials will we need next quarter?" },
   timeToDoseActions: { kind: "Prescriptive", question: "How can we speed up time to first dose?" },
   inventoryRisk: { kind: "Predictive", question: "Will channel inventory run short?" },
@@ -111,12 +146,24 @@ const forwardQuestions = {
   stopActions: { kind: "Prescriptive", question: "How can we reduce discontinuations?" },
   trafficOutlook: { kind: "Predictive", question: "What will website traffic be next quarter?" },
   marketingActions: { kind: "Prescriptive", question: "Where should we focus marketing next?" },
-  mediaOutlook: { kind: "Predictive", question: "How many impressions will we deliver next quarter?" },
-  hvaActions: { kind: "Prescriptive", question: "How do we turn website visits into rep requests?" },
+  mediaOutlook: {
+    kind: "Predictive",
+    question: "How many impressions will we deliver next quarter?",
+  },
+  hvaActions: {
+    kind: "Prescriptive",
+    question: "How do we turn website visits into rep requests?",
+  },
   reachOutlook: { kind: "Predictive", question: "How many HCPs will we reach by year end?" },
   fieldActions: { kind: "Prescriptive", question: "Which HCPs should the field team prioritize?" },
-  prescriberOutlook: { kind: "Predictive", question: "How many new prescribers can we expect next quarter?" },
-  repeatActions: { kind: "Prescriptive", question: "How do we turn one-time prescribers into repeat prescribers?" },
+  prescriberOutlook: {
+    kind: "Predictive",
+    question: "How many new prescribers can we expect next quarter?",
+  },
+  repeatActions: {
+    kind: "Prescriptive",
+    question: "How do we turn one-time prescribers into repeat prescribers?",
+  },
 } as const satisfies Record<string, { kind: QuestionKind; question: string }>;
 
 type ForwardTopic = keyof typeof forwardQuestions;
@@ -145,7 +192,8 @@ export const dashboardAnswers = {
   forecast: {
     title: "Net sales and vials vs forecast",
     response: lines(
-      "**Net sales are $24.5M launch to date, 94% of forecast**, after a slow Q1. Q3 is running ahead.",
+      "- **Net sales are $24.5M launch to date, 94% of forecast**, after a slow Q1.",
+      "- Q3 is running ahead.",
       "",
       "| Metric | Actual | Target | Attainment |",
       "| --- | ---: | ---: | ---: |",
@@ -164,7 +212,7 @@ export const dashboardAnswers = {
   active: {
     title: "Active patients",
     response: lines(
-      "**62 patients are active** (dosed in the last 16 weeks), up 15% from 54 in August.",
+      "- **62 patients are active** (dosed in the last 16 weeks), up 15% from 54 in August.",
       "",
       "| Payment | Patients |",
       "| --- | ---: |",
@@ -187,7 +235,7 @@ export const dashboardAnswers = {
   pending: {
     title: "Pending patients",
     response: lines(
-      "**9 patients are referred but not yet dosed**, pending an average of 22 days.",
+      "- **9 patients are referred but not yet dosed**, pending an average of 22 days.",
       "",
       "| Stage | Patients |",
       "| --- | ---: |",
@@ -207,7 +255,7 @@ export const dashboardAnswers = {
   prescribers: {
     title: "Prescribers",
     response: lines(
-      "**38 HCPs have prescribed since launch**, and September added the most new prescribers since February.",
+      "- **38 HCPs have prescribed since launch**, and September added the most new prescribers since February.",
       "",
       "| Prescribers | HCPs |",
       "| --- | ---: |",
@@ -224,7 +272,7 @@ export const dashboardAnswers = {
   summary: {
     title: "Launch summary",
     response: lines(
-      "**Sales are close to forecast and Q3 is running ahead.** Key numbers launch to date:",
+      "- **Sales are close to forecast and Q3 is running ahead.** Key numbers launch to date:",
       "",
       "| Area | Status |",
       "| --- | --- |",
@@ -243,36 +291,40 @@ export const dashboardAnswers = {
   priorAuth: {
     title: "Prior authorization",
     response: lines(
-      "**95% of decided PAs have been approved**, and approvals are getting faster.",
+      "- **First-pass PA approval fell to 58% in Q3**, from 94% in H1: 13 PAs have been denied first time since launch, 10 of them in Q3.",
+      "- 11 of the 12 decided appeals were overturned, so 73 of 77 patients (95%) were approved in the end.",
+      "- Appeals add about 19 days: days to approval rose from 13 for June referrals to 18 for August.",
       "",
-      "| PA status | Patients |",
+      "| PA status | PAs |",
       "| --- | ---: |",
       "| Submitted | 77 |",
-      "| Approved | 73 |",
-      "| Awaiting decision | 3 |",
-      "| Denied | 1 |",
+      "| Approved first time | 62 |",
+      "| Denied first time | 13 |",
+      "| Awaiting decision | 2 |",
       "",
-      "| Days from referral to first PA approval | Days |",
+      "| After appeal | Patients |",
       "| --- | ---: |",
-      "| Median (mean 18) | 15 |",
-      "| January referrals | 21 |",
-      "| August referrals | 11 |",
+      "| Approved in the end | 73 |",
+      "| Appeal pending | 1 |",
+      "| Denied (upheld) | 1 |",
     ),
     suggestions: [
+      "Why is our PA approval rate dropping?",
       "How long does it take to get to first dose?",
       "What does the payer mix look like?",
-      "Why are patients stopping therapy?",
     ],
   },
   timeToDose: {
     title: "Time to first dose",
     response: lines(
-      "**Non-EAP patients reach their first dose a median of 29 days after referral** (mean 34, across 50 new-to-brand starts).",
+      "- **Non-EAP patients reach their first dose a median of 29 days after referral** (mean 34, across 50 new-to-brand starts).",
+      "- It fell from 40 days for January referrals to 26 for June, then rose again to 29 for August as PA denials added appeal time.",
       "",
       "| Referral month | Days to first dose |",
       "| --- | ---: |",
       "| January | 40 |",
-      "| August | 23 |",
+      "| June | 26 |",
+      "| August | 29 |",
       "",
       "| Referral outcome | Patients | Share |",
       "| --- | ---: | ---: |",
@@ -288,7 +340,7 @@ export const dashboardAnswers = {
   payerMix: {
     title: "Payer mix",
     response: lines(
-      "**Medicare is the largest payer** across 80 referred patients and 143 paid doses.",
+      "- **Medicare is the largest payer** across 80 referred patients and 143 paid doses.",
       "",
       "| Payer | Referred patients | Paid doses |",
       "| --- | ---: | ---: |",
@@ -311,7 +363,7 @@ export const dashboardAnswers = {
   stops: {
     title: "Discontinuations",
     response: lines(
-      "**11 patients have stopped or never started.**",
+      "- **11 patients have stopped or never started.**",
       "",
       "| Reason | Before first dose | After dosing |",
       "| --- | ---: | ---: |",
@@ -332,7 +384,7 @@ export const dashboardAnswers = {
   inventory: {
     title: "Channel inventory",
     response: lines(
-      "**23 vials are in the channel**, about 0.8 months of supply at the recent average of 29 doses a month.",
+      "- **23 vials are in the channel**, about 0.8 months of supply at the recent average of 29 doses a month.",
       "",
       "| Location | Vials |",
       "| --- | ---: |",
@@ -351,7 +403,7 @@ export const dashboardAnswers = {
   mediaChannels: {
     title: "Paid media by channel",
     response: lines(
-      "**Paid media has delivered 17.4M impressions since launch**, growing from 1.5M in M1 to 2.4M in M9.",
+      "- **Paid media has delivered 17.4M impressions since launch**, growing from 1.5M in M1 to 2.4M in M9.",
       "",
       "| Channel | Impressions | Share |",
       "| --- | ---: | ---: |",
@@ -371,7 +423,7 @@ export const dashboardAnswers = {
   adEngagement: {
     title: "Ad engagement",
     response: lines(
-      "**The click & video engagement rate is 7.2%**, and it has risen every month, from 6.4% in M1 to 7.9% in M9.",
+      "- **The click & video engagement rate is 7.2%**, and it has risen every month, from 6.4% in M1 to 7.9% in M9.",
       "",
       "| Metric | Value |",
       "| --- | ---: |",
@@ -389,7 +441,7 @@ export const dashboardAnswers = {
   websiteTraffic: {
     title: "Website traffic",
     response: lines(
-      "**The brand websites have had 142.7k visits since launch**; monthly visits are up 7% on M8.",
+      "- **The brand websites have had 142.7k visits since launch**; monthly visits are up 7% on M8.",
       "",
       "| Site | Visits |",
       "| --- | ---: |",
@@ -415,7 +467,7 @@ export const dashboardAnswers = {
   emailPerformance: {
     title: "Email performance",
     response: lines(
-      "**67.4k emails were delivered**, with a 29.1% open rate and a 4.3% click rate.",
+      "- **67.4k emails were delivered**, with a 29.1% open rate and a 4.3% click rate.",
       "",
       "| Step | Emails | Rate |",
       "| --- | ---: | ---: |",
@@ -437,7 +489,8 @@ export const dashboardAnswers = {
   regionalMarketing: {
     title: "Marketing by region",
     response: lines(
-      "**Northeast leads on most measures**, with 7.3% engagement and a 29.8% email open rate. Midwest is smallest and trails on HVA and open rates.",
+      "- **Northeast leads on most measures**, with 7.3% engagement and a 29.8% email open rate.",
+      "- Midwest is smallest and trails on HVA and open rates.",
       "",
       "| Region | Impressions | Engagement | HVA rate | Open rate |",
       "| --- | ---: | ---: | ---: | ---: |",
@@ -456,7 +509,7 @@ export const dashboardAnswers = {
   fieldReach: {
     title: "HCP reach",
     response: lines(
-      "**126 of 150 targeted HCPs have been reached (84%)**, up from 34% in M1 as the call plan grew from 120 to 150 HCPs.",
+      "- **126 of 150 targeted HCPs have been reached (84%)**, up from 34% in M1 as the call plan grew from 120 to 150 HCPs.",
       "",
       "| Month | Targeted | Reached | Reach % |",
       "| --- | ---: | ---: | ---: |",
@@ -479,7 +532,7 @@ export const dashboardAnswers = {
   fieldCalls: {
     title: "Field calls",
     response: lines(
-      "**The field team has made 872 calls since launch**, rising from 64 in M1 to 128 in M9.",
+      "- **The field team has made 872 calls since launch**, rising from 64 in M1 to 128 in M9.",
       "",
       "| Metric | Value |",
       "| --- | ---: |",
@@ -509,7 +562,7 @@ export const dashboardAnswers = {
   fieldCallMix: {
     title: "Call type mix",
     response: lines(
-      "**59% of calls are face-to-face**, and the split has held between 58% and 60% every month.",
+      "- **59% of calls are face-to-face**, and the split has held between 58% and 60% every month.",
       "",
       "| Call type | Calls | Share |",
       "| --- | ---: | ---: |",
@@ -527,7 +580,7 @@ export const dashboardAnswers = {
   fieldFunnel: {
     title: "HCP engagement funnel",
     response: lines(
-      "**38 of 150 targeted HCPs have prescribed (25%)**, and 9 are champions with 3+ patients started.",
+      "- **38 of 150 targeted HCPs have prescribed (25%)**, and 9 are champions with 3+ patients started.",
       "",
       "| Stage | HCPs | % of targeted |",
       "| --- | ---: | ---: |",
@@ -548,7 +601,8 @@ export const dashboardAnswers = {
   fieldRegional: {
     title: "Field reach by region",
     response: lines(
-      "**Northeast has the best HCP reach at 86.4%**, just ahead of West (85.7%). Midwest trails at 80%.",
+      "- **Northeast has the best HCP reach at 86.4%**, just ahead of West (85.7%).",
+      "- Midwest trails at 80%.",
       "",
       "| Region | Targeted | Reached | Reach % | Calls | Prescribers |",
       "| --- | ---: | ---: | ---: | ---: | ---: |",
@@ -567,7 +621,8 @@ export const dashboardAnswers = {
   fillRate: {
     title: "Fill rate",
     response: lines(
-      "**86% of referrals have filled (reached a first dose)**, just above the 85% target. 97% of referrals with a known outcome have started.",
+      "- **86% of referrals have filled (reached a first dose)**, just above the 85% target.",
+      "- 97% of referrals with a known outcome have started.",
       "",
       "| Measure | Patients | Rate |",
       "| --- | ---: | ---: |",
@@ -588,7 +643,7 @@ export const dashboardAnswers = {
   abandonment: {
     title: "Abandonment rate",
     response: lines(
-      "**2.5% of referrals were abandoned before a first dose** (2 of 80), within the 5% target.",
+      "- **2.5% of referrals were abandoned before a first dose** (2 of 80), within the 5% target.",
       "",
       "| Measure | Patients | Rate |",
       "| --- | ---: | ---: |",
@@ -609,7 +664,7 @@ export const dashboardAnswers = {
   salesOutlook: {
     title: "Net sales outlook",
     response: lines(
-      "**Net sales are projected at $15.8M in Q4, taking launch-to-date sales to about $40.3M by year end.** That is 33% above Q3's $11.9M, if paid vials keep growing by about 2.7 a month.",
+      "- **Net sales are projected at $15.8M in Q4, taking launch-to-date sales to about $40.3M by year end.** That is 33% above Q3's $11.9M, if paid vials keep growing by about 2.7 a month.",
       "",
       "| Month | Paid vials | Net sales |",
       "| --- | ---: | ---: |",
@@ -629,7 +684,7 @@ export const dashboardAnswers = {
   salesActions: {
     title: "Actions to close the sales gap",
     response: lines(
-      "**Moving the 12 patients on Quick Start and Bridge to commercial coverage would close the $1.5M launch-to-date gap in about 1.6 months.** Together, the three actions below add about $1.61M a month.",
+      "- **Moving the 12 patients on Quick Start and Bridge to commercial coverage would close the $1.5M launch-to-date gap in about 1.6 months.** Together, the three actions below add about $1.61M a month.",
       "",
       "| Action | Patients | Net sales / month |",
       "| --- | ---: | ---: |",
@@ -649,7 +704,8 @@ export const dashboardAnswers = {
   supplyOutlook: {
     title: "Vial supply outlook",
     response: lines(
-      "**About 122 vials need to ship in Q4**: 107 projected doses plus one month of cover for December, less the 23 on hand. That is 28% more than the 95 shipped in Q3.",
+      "- **About 122 vials need to ship in Q4**: 107 projected doses plus one month of cover for December, less the 23 on hand.",
+      "- That is 28% more than the 95 shipped in Q3.",
       "",
       "| Month | Projected doses |",
       "| --- | ---: |",
@@ -672,25 +728,26 @@ export const dashboardAnswers = {
   timeToDoseActions: {
     title: "Actions to speed up first dose",
     response: lines(
-      "**Procedure scheduling is the biggest lever**: it takes 12 of the 23 days from referral to first dose (52%) for August referrals, and holds 4 of the 9 pending patients, 2 of them waiting over 30 days.",
+      "- **PA is now the biggest delay**: approval takes 18 of the 29 days from referral to first dose for August referrals, up from 11 days in May.",
+      "- Procedure scheduling takes the other 11 of the 29 days (38%) and holds 4 of the 9 pending patients, 2 of them waiting over 30 days.",
       "",
       "| Step | Median days (Aug) | Pending | Over 30 days | Action |",
       "| --- | ---: | ---: | ---: | --- |",
-      "| Referral → PA approval | 11 | 5 | 1 | Escalate the PA over 30 days; keep benefits checks under 14 days |",
-      "| PA approval → first dose | 12 | 4 | 2 | Add site scheduling support and book the procedure at PA approval |",
+      "| Referral → PA approval | 18 | 5 | 1 | Cut first-pass denials |",
+      "| PA approval → first dose | 11 | 4 | 2 | Book procedure at PA approval |",
       "",
-      "At the recent pace (1.7 days faster each month), the median would reach about 20 days for October referrals.",
+      "Most of the PA delay comes from appeals after first-pass denials; see what can be done about PA denials.",
     ),
     suggestions: [
+      "What can we do about PA denials?",
       "How many vials will we need next quarter?",
       "What is our PA approval rate?",
-      "How long does it take to get to first dose?",
     ],
   },
   trafficOutlook: {
     title: "Website traffic outlook",
     response: lines(
-      "**Website visits are projected at 66.7k in Q4**, 18% above Q3's 56.6k, if monthly visits keep growing by about 1.1k.",
+      "- **Website visits are projected at 66.7k in Q4**, 18% above Q3's 56.6k, if monthly visits keep growing by about 1.1k.",
       "",
       "| Month | Projected visits |",
       "| --- | ---: |",
@@ -712,7 +769,7 @@ export const dashboardAnswers = {
   marketingActions: {
     title: "Marketing priorities",
     response: lines(
-      "**Lift HCP email engagement first**: HCP emails open at 26.0% against 36.0% for patients, and convert a third as often (0.5% vs 1.5%).",
+      "- **Lift HCP email engagement first**: HCP emails open at 26.0% against 36.0% for patients, and convert a third as often (0.5% vs 1.5%).",
       "",
       "| Priority | Evidence | Expected effect |",
       "| --- | --- | --- |",
@@ -729,7 +786,7 @@ export const dashboardAnswers = {
   reachOutlook: {
     title: "HCP reach outlook",
     response: lines(
-      "**Field reach is projected at 142 of 150 targeted HCPs (95%) by December**, if the team keeps adding about 5 HCPs a month.",
+      "- **Field reach is projected at 142 of 150 targeted HCPs (95%) by December**, if the team keeps adding about 5 HCPs a month.",
       "",
       "| Month | HCPs reached | Calls |",
       "| --- | ---: | ---: |",
@@ -750,7 +807,7 @@ export const dashboardAnswers = {
   fieldActions: {
     title: "Field priorities",
     response: lines(
-      "**Start with the 24 targeted HCPs not yet reached, 6 in each region, beginning with Midwest (80% reach) and Southeast (82%).** Then work the 88 reached HCPs who have not prescribed: 30% of reached HCPs prescribe today.",
+      "- **Start with the 24 targeted HCPs not yet reached, 6 in each region, beginning with Midwest (80% reach) and Southeast (82%).** Then work the 88 reached HCPs who have not prescribed: 30% of reached HCPs prescribe today.",
       "",
       "| Region | Not yet reached | Reach % | Reached → prescriber |",
       "| --- | ---: | ---: | ---: |",
@@ -768,7 +825,7 @@ export const dashboardAnswers = {
   salesMilestone: {
     title: "Net sales milestone",
     response: lines(
-      "**Monthly net sales are projected to pass $5M in November**, up from $4.44M in September.",
+      "- **Monthly net sales are projected to pass $5M in November**, up from $4.44M in September.",
       "",
       "| Month | Projected net sales |",
       "| --- | ---: |",
@@ -787,7 +844,7 @@ export const dashboardAnswers = {
   activeOutlook: {
     title: "Active patient outlook",
     response: lines(
-      "**About 83 patients are projected to be active by December**, up from 62 today, if the base keeps growing by about 7 a month.",
+      "- **About 83 patients are projected to be active by December**, up from 62 today, if the base keeps growing by about 7 a month.",
       "",
       "| Month | Active patients |",
       "| --- | ---: |",
@@ -807,7 +864,8 @@ export const dashboardAnswers = {
   freeToPaidActions: {
     title: "Free goods to paid",
     response: lines(
-      "**18 active patients (29%) are on free goods.** Moving the 12 on Quick Start and Bridge to commercial coverage is worth about $0.92M a month. PAP patients usually stay free, so re-screen them for public coverage.",
+      "- **18 active patients (29%) are on free goods.** Moving the 12 on Quick Start and Bridge to commercial coverage is worth about $0.92M a month.",
+      "- PAP patients usually stay free, so re-screen them for public coverage.",
       "",
       "| Program | Patients | Action | Net sales / month if paid |",
       "| --- | ---: | --- | ---: |",
@@ -826,7 +884,7 @@ export const dashboardAnswers = {
   over30Actions: {
     title: "Patients waiting over 30 days",
     response: lines(
-      "**3 patients have waited more than 30 days: 2 at procedure scheduling and 1 at prior authorization.** If all three were lost, abandonment would rise from 2.5% to 6.3%, above the 5% target.",
+      "- **3 patients have waited more than 30 days: 2 at procedure scheduling and 1 at prior authorization.** If all three were lost, abandonment would rise from 2.5% to 6.3%, above the 5% target.",
       "",
       "| Stage | Over 30 days | Action |",
       "| --- | ---: | --- |",
@@ -844,7 +902,7 @@ export const dashboardAnswers = {
   inventoryRisk: {
     title: "Inventory risk",
     response: lines(
-      "**Yes, without new shipments: the 23 vials on hand cover about 21 days of October's projected 33 doses.** Ship about 46 vials in October to cover the month and start November with a month of cover.",
+      "- **Yes, without new shipments: the 23 vials on hand cover about 21 days of October's projected 33 doses.** Ship about 46 vials in October to cover the month and start November with a month of cover.",
       "",
       "| Measure | Vials |",
       "| --- | ---: |",
@@ -864,30 +922,31 @@ export const dashboardAnswers = {
   timeOutlook: {
     title: "Time to first dose outlook",
     response: lines(
-      "**The median time from referral to first dose is projected to fall from 23 days (August referrals) to about 16 days for December referrals**, if the recent pace holds.",
+      "- **Time to first dose is projected to edge up from 29 days (August referrals) to about 30 by December**, reversing the gains made in H1.",
+      "- The driver is PA: days to approval are projected to rise from 18 to about 23 while first-pass denials stay high.",
       "",
       "| Referral month | Days to first dose | Days to PA approval |",
       "| --- | ---: | ---: |",
-      "| Aug (actual) | 23 | 11 |",
-      "| Sep | 21 | 10 |",
-      "| Oct | 20 | 9 |",
-      "| Nov | 18 | 8 |",
-      "| Dec | 16 | 7 |",
+      "| Aug (actual) | 29 | 18 |",
+      "| Sep | 29 | 19 |",
+      "| Oct | 30 | 21 |",
+      "| Nov | 30 | 22 |",
+      "| Dec | 30 | 23 |",
       "",
-      "Gains this fast rarely continue for long; procedure scheduling capacity will set a floor.",
+      "Fixing first-pass PA denials would remove most of the added time.",
       "",
       "Method: straight-line trend of the last three months (Jun → Sep). A demo estimate, not a forecast.",
     ),
     suggestions: [
       "How can we speed up time to first dose?",
-      "How long does it take to get to first dose?",
+      "Why is our PA approval rate dropping?",
       "What is our PA approval rate?",
     ],
   },
   stopActions: {
     title: "Reducing discontinuations",
     response: lines(
-      "**8 of the 11 patients who stopped or never started did so because of disease progression (death, ventilation or hospice).** The 3 access denials are the part we can act on directly, and 2 of those patients have already restarted.",
+      "- **8 of the 11 patients who stopped or never started did so because of disease progression (death, ventilation or hospice).** The 3 access denials are the part we can act on directly, and 2 of those patients have already restarted.",
       "",
       "| Reason | Before first dose | After dosing | Lever |",
       "| --- | ---: | ---: | --- |",
@@ -905,7 +964,7 @@ export const dashboardAnswers = {
   mediaOutlook: {
     title: "Media outlook",
     response: lines(
-      "**Paid media is projected to deliver about 7.8M impressions in Q4**, 15% more than Q3's 6.8M, with engagement rising to about 8.5% by December.",
+      "- **Paid media is projected to deliver about 7.8M impressions in Q4**, 15% more than Q3's 6.8M, with engagement rising to about 8.5% by December.",
       "",
       "| Month | Impressions | Engagement rate |",
       "| --- | ---: | ---: |",
@@ -924,7 +983,8 @@ export const dashboardAnswers = {
   hvaActions: {
     title: "Website to rep requests",
     response: lines(
-      "**Only 410 of 6.8k high value actions (6%) are rep requests**, about 8.1 for every 1,000 HCP site visits. Most HCP visitors download a resource and leave.",
+      "- **Only 410 of 6.8k high value actions (6%) are rep requests**, about 8.1 for every 1,000 HCP site visits.",
+      "- Most HCP visitors download a resource and leave.",
       "",
       "| Action | Evidence | Expected effect |",
       "| --- | --- | --- |",
@@ -941,7 +1001,7 @@ export const dashboardAnswers = {
   prescriberOutlook: {
     title: "New prescriber outlook",
     response: lines(
-      "**About 11 new prescribers are expected in Q4, taking the total to about 49 by December**, based on the last three months' average of 3.7 a month.",
+      "- **About 11 new prescribers are expected in Q4, taking the total to about 49 by December**, based on the last three months' average of 3.7 a month.",
       "",
       "| Month | New prescribers |",
       "| --- | ---: |",
@@ -961,7 +1021,7 @@ export const dashboardAnswers = {
   repeatActions: {
     title: "Growing repeat prescribers",
     response: lines(
-      "**14 of the 38 prescribers have prescribed only once.** Helping them find a second eligible patient is the biggest lever, and the 9 champions with 3+ patients can share their experience with peers.",
+      "- **14 of the 38 prescribers have prescribed only once.** Helping them find a second eligible patient is the biggest lever, and the 9 champions with 3+ patients can share their experience with peers.",
       "",
       "| Segment | HCPs | Action |",
       "| --- | ---: | --- |",
@@ -973,6 +1033,76 @@ export const dashboardAnswers = {
       "How many new prescribers can we expect next quarter?",
       "Which HCPs should the field team prioritize?",
       "How many new prescribers did we add?",
+    ],
+  },
+  paDenials: {
+    title: "PA first-pass denials",
+    response: lines(
+      "- **First-pass PA approval fell from 94% in H1 to 58% in Q3** (50% in September): 10 denials in Q3, against 3 in all of H1.",
+      "- **It's a documentation problem, not medical need**: 9 of 10 Q3 denials cite a missing confirmatory test result or baseline functional score, after two Medicare Advantage plans changed their PA criteria on Jul 1.",
+      "- **It's concentrated**: Medicare Advantage accounts for 8 of 10 Q3 denials but only 18% of referrals, and 3 centres without hub pre-review account for 8 of 10.",
+      "",
+      "| Q3 driver | Denials | Share of Q3 denials |",
+      "| --- | ---: | ---: |",
+      "| Missing documentation | 9 | 90% |",
+      "| Medicare Advantage | 8 | 80% |",
+      "| 3 centres without pre-review | 8 | 80% |",
+      "| Southeast region | 5 | 50% |",
+      "| **Total Q3 denials** | **10** | **100%** |",
+      "",
+      "11 of 12 decided appeals are overturned, so patients still get approved, but each appeal adds about 19 days to time to first dose.",
+    ),
+    suggestions: [
+      "What can we do about PA denials?",
+      "Which sites are driving PA denials?",
+      "How fast will time to first dose improve?",
+    ],
+  },
+  paDenialActions: {
+    title: "Actions to reduce PA denials",
+    response: lines(
+      "- **Fixing documentation at 3 centres would remove most denials**: they account for 8 of 10 Q3 denials and approve only 11% of PAs first time, against 87% at sites using hub pre-review.",
+      "- Each avoided denial saves about 19 days of appeal time, and most denied patients are approved on appeal anyway.",
+      "",
+      "| Action | Target | Evidence |",
+      "| --- | --- | --- |",
+      "| Enrol in hub PA pre-review | 3 centres | 11% vs 87% first-pass |",
+      "| PA checklist: test result + baseline score | All MA submissions | 9 of 10 Q3 denials |",
+      "| Reimbursement manager visits | Southeast, Midwest | 8 of 10 Q3 denials |",
+      "| Engage the two MA plans | Medicare Advantage | Criteria changed Jul 1 |",
+      "| Keep appealing documentation denials | All denials | 11 of 12 overturned |",
+      "",
+      "Back at the H1 first-pass rate of 94%, Q3 would have seen 1 or 2 denials instead of 10.",
+    ),
+    suggestions: [
+      "Which sites are driving PA denials?",
+      "Why is our PA approval rate dropping?",
+      "How can we speed up time to first dose?",
+    ],
+  },
+  paSites: {
+    title: "PA denials by site",
+    response: lines(
+      "- **Three centres without hub pre-review account for 8 of 10 Q3 denials**: Southeast Center A, Southeast Center B and Midwest Center A.",
+      "- Sites using hub pre-review approve 87% of PAs first time, against 11% at those three.",
+      "",
+      "| Q3 site | Submitted | Approved | Denied | Awaiting | First-pass |",
+      "| --- | ---: | ---: | ---: | ---: | ---: |",
+      "| Southeast Center A | 4 | 1 | 3 | 0 | 25% |",
+      "| Southeast Center B | 3 | 0 | 2 | 1 | 0% |",
+      "| Midwest Center A | 3 | 0 | 3 | 0 | 0% |",
+      "| Northeast sites | 8 | 6 | 1 | 1 | 86% |",
+      "| West sites | 5 | 4 | 1 | 0 | 80% |",
+      "| Other Southeast sites | 2 | 2 | 0 | 0 | 100% |",
+      "| Other Midwest sites | 1 | 1 | 0 | 0 | 100% |",
+      "| **Total** | **26** | **14** | **10** | **2** | **58%** |",
+      "",
+      "First-pass approval is approved ÷ (approved + denied); PAs awaiting a decision aren't counted yet.",
+    ),
+    suggestions: [
+      "What can we do about PA denials?",
+      "Why is our PA approval rate dropping?",
+      "What is our PA approval rate?",
     ],
   },
   unrecognized: {
@@ -999,6 +1129,9 @@ const topicPanels: Record<Topic, readonly PanelLabel[] | null> = {
   prescribers: ["Overview", "Executive Summary"],
   summary: ["Overview", "Executive Summary"],
   priorAuth: ["Market Access"],
+  paDenials: ["Market Access"],
+  paDenialActions: ["Market Access"],
+  paSites: ["Market Access"],
   timeToDose: ["Market Access"],
   payerMix: ["Market Access"],
   stops: ["Market Access"],
@@ -1038,9 +1171,23 @@ const topicPanels: Record<Topic, readonly PanelLabel[] | null> = {
 function topicFor(question: string): Topic {
   const normalized = question.toLowerCase().trim();
 
+  // PA denial story: the diagnosis, the actions and the site breakdown.
+  if (
+    /deni|reject|first.pass/.test(normalized) ||
+    (/\bwhy\b/.test(normalized) && /\bpa\b|prior auth|approval/.test(normalized))
+  ) {
+    if (/site|center|centre|clinic|account/.test(normalized)) return "paSites";
+    if (/\bshould\b|how can we|how do we|what can we|reduce|fix|improve/.test(normalized))
+      return "paDenialActions";
+    return "paDenials";
+  }
   // Prescriptive ("should", "how can we") and predictive ("will", "next quarter") questions
   // come first, so their subject words don't route them to a descriptive answer.
-  if (/\bshould\b|recommend|how can we|how do we|what can we|focus|speed up|close the/.test(normalized)) {
+  if (
+    /\bshould\b|recommend|how can we|how do we|what can we|focus|speed up|close the/.test(
+      normalized,
+    )
+  ) {
     if (/free.goods|to paid/.test(normalized)) return "freeToPaidActions";
     if (/over 30|waiting/.test(normalized)) return "over30Actions";
     if (/discontinu|stopping/.test(normalized)) return "stopActions";
@@ -1069,7 +1216,8 @@ function topicFor(question: string): Topic {
   // Field questions first: "region", "engagement" and "HCP" also appear in other topics.
   if (/region/.test(normalized) && /hcp|reach|call|field/.test(normalized)) return "fieldRegional";
   if (/engagement funnel|champion|repeat prescriber/.test(normalized)) return "fieldFunnel";
-  if (/call (type|mix)|face-to-face|face to face|virtual|phone/.test(normalized)) return "fieldCallMix";
+  if (/call (type|mix)|face-to-face|face to face|virtual|phone/.test(normalized))
+    return "fieldCallMix";
   if (/\bcalls?\b|field|selling day/.test(normalized)) return "fieldCalls";
   if (/\breach|targeted|target hcp/.test(normalized)) return "fieldReach";
   if (/impression|media/.test(normalized)) return "mediaChannels";
@@ -1100,7 +1248,8 @@ const forwardFollowUps: Partial<Record<Topic, ForwardTopic[]>> = {
   prescribers: ["prescriberOutlook", "repeatActions", "salesActions"],
   fillRate: ["timeOutlook", "timeToDoseActions", "salesActions"],
   abandonment: ["over30Actions", "timeOutlook", "stopActions"],
-  priorAuth: ["timeOutlook", "timeToDoseActions"],
+  priorAuth: ["paDenials", "timeOutlook", "paDenialActions"],
+  paSites: ["paDenialActions", "timeOutlook"],
   timeToDose: ["timeOutlook", "timeToDoseActions"],
   payerMix: ["supplyOutlook", "freeToPaidActions"],
   stops: ["timeOutlook", "stopActions"],

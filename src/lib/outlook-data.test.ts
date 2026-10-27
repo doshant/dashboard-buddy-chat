@@ -152,7 +152,9 @@ describe("Signals flagged when the assistant opens", () => {
     expect(signals.map((signal) => signal.question)).toContain(
       "What should we do to close the sales gap?",
     );
-    expect(signals[0]?.reason).toBe("Net sales at 94% of forecast launch to date");
+    expect(signals.map((signal) => signal.reason)).toContain(
+      "Net sales at 94% of forecast launch to date",
+    );
   });
 
   it("only flags questions each profile can open, and every flag has an answer", () => {

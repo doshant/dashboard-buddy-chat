@@ -6,6 +6,7 @@ import {
   Route,
   Syringe,
   Timer,
+  TriangleAlert,
   Wallet,
 } from "lucide-react";
 import {
@@ -68,6 +69,8 @@ export function MarketAccessPanel() {
     timeToTherapySummary,
     vialsAdministered,
   } = marketAccess;
+  const { paAnalysis } = marketAccess;
+  const paDecided = paAnalysis.approvedFirstPass + paAnalysis.denied;
   const { administered, inventory: channel } = marketAccessKpis;
   const firstCohort = timeToTherapy[0];
   const lastCohort = timeToTherapy[timeToTherapy.length - 1];
@@ -112,11 +115,14 @@ export function MarketAccessPanel() {
           }}
         />
         <StatCard
-          title="PA Approval Rate"
+          title="PA First-Pass Approval"
           Icon={BadgeCheck}
-          value={`${priorAuth.approvalPct}%`}
-          detail={`${priorAuth.approved} approved of ${priorAuth.submitted} PAs submitted`}
-          comparison={{ text: `${priorAuth.pending} pending · ${priorAuth.denied} denied` }}
+          value={`${paAnalysis.firstPassPct}%`}
+          detail={`${paAnalysis.approvedFirstPass} of ${paDecided} decided PAs approved first time ${period.long} · ${priorAuth.approvalPct}% approved after appeal`}
+          comparison={{
+            text: `${paAnalysis.firstPassH1}% in H1 → ${paAnalysis.firstPassQ3}% in Q3`,
+            direction: "down",
+          }}
         />
         <StatCard
           title="Time to First Approved PA"
@@ -158,6 +164,91 @@ export function MarketAccessPanel() {
         aria-label="Market access charts"
         className="dashboard-chart-grid grid grid-cols-12 gap-4"
       >
+        <DashboardPanel
+          title="PA First-Pass Decisions"
+          subtitle={`PAs by submission month · ${paAnalysis.firstPassPct}% approved first time ${period.long} (H1 ${paAnalysis.firstPassH1}%, Q3 ${paAnalysis.firstPassQ3}%)`}
+          className="col-span-12 xl:col-span-8"
+        >
+          <StackedMonthlyBars
+            data={paAnalysis.months.map((row) => ({ ...row, total: row.submitted }))}
+            series={[
+              { key: "approved", label: "Approved first time", color: "series-1" },
+              { key: "denied", label: "Denied first time", color: "series-3" },
+              { key: "awaiting", label: "Awaiting decision", color: "target" },
+            ]}
+          />
+          <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground">
+            <TriangleAlert size={13} className="mt-px shrink-0 text-watch" />
+            {paAnalysis.policyNote}
+          </p>
+        </DashboardPanel>
+
+        <DashboardPanel
+          title="PA Denial Reasons"
+          subtitle={`${paAnalysis.denied} first-pass denials ${period.long}`}
+          className="col-span-12 md:col-span-6 xl:col-span-4"
+        >
+          {paAnalysis.denialsByReason.length ? (
+            <RankedBars unit="Denials" categoryWidth={150} data={paAnalysis.denialsByReason} />
+          ) : (
+            <p className="py-6 text-center text-xs text-muted-foreground">
+              No first-pass denials in this period.
+            </p>
+          )}
+        </DashboardPanel>
+
+        <DashboardPanel
+          title="PA Denials by Payer"
+          subtitle={`${paAnalysis.denied} first-pass denials ${period.long}`}
+          className="col-span-12 md:col-span-6 xl:col-span-4"
+        >
+          {paAnalysis.denialsByPayer.length ? (
+            <RankedBars unit="Denials" categoryWidth={112} data={paAnalysis.denialsByPayer} />
+          ) : (
+            <p className="py-6 text-center text-xs text-muted-foreground">
+              No first-pass denials in this period.
+            </p>
+          )}
+        </DashboardPanel>
+
+        <DashboardPanel
+          title="PA Denials by Site"
+          subtitle={`${paAnalysis.denied} first-pass denials ${period.long}`}
+          className="col-span-12 md:col-span-6 xl:col-span-4"
+        >
+          {paAnalysis.denialsBySite.length ? (
+            <RankedBars unit="Denials" categoryWidth={120} data={paAnalysis.denialsBySite} />
+          ) : (
+            <p className="py-6 text-center text-xs text-muted-foreground">
+              No first-pass denials in this period.
+            </p>
+          )}
+        </DashboardPanel>
+
+        <DashboardPanel
+          title="PA Appeals"
+          subtitle="Every first-pass denial since launch is appealed"
+          className="col-span-12 md:col-span-6 xl:col-span-4"
+        >
+          <p className="mb-1 text-[26px] font-bold leading-none tabular-nums">
+            {paAnalysis.appeals.overturnedOfDecidedPct}%
+          </p>
+          <p className="mb-3 text-[11px] text-muted-foreground">
+            of decided appeals overturned · each adds about {paAnalysis.appeals.medianDaysAdded}{" "}
+            days
+          </p>
+          <RankedBars
+            unit="Appeals"
+            categoryWidth={76}
+            showShare={false}
+            data={[
+              { label: "Overturned", value: paAnalysis.appeals.overturned },
+              { label: "Pending", value: paAnalysis.appeals.pending },
+              { label: "Upheld", value: paAnalysis.appeals.upheld },
+            ]}
+          />
+        </DashboardPanel>
+
         <DashboardPanel
           title="Vials Administered"
           subtitle={`One vial per dose · paid vs free · ${period.long}`}
@@ -315,14 +406,14 @@ export function MarketAccessPanel() {
         </DashboardPanel>
 
         <DashboardPanel
-          title="PA Outcomes"
-          subtitle={`${priorAuth.submitted} patients with a PA submitted`}
+          title="PA Outcomes After Appeal"
+          subtitle={`${priorAuth.submitted} patients with a PA submitted since launch`}
           className="col-span-12 md:col-span-6 xl:col-span-3"
         >
           <p className="mb-1 text-[26px] font-bold leading-none tabular-nums">
             {priorAuth.approvalPct}%
           </p>
-          <p className="mb-3 text-[11px] text-muted-foreground">approved</p>
+          <p className="mb-3 text-[11px] text-muted-foreground">approved in the end</p>
           <RankedBars
             unit="Patients"
             categoryWidth={64}

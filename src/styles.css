@@ -246,9 +246,16 @@
   line-height: 1.35;
 }
 
-.chat-transcript [data-streamdown="table-header-cell"]:not(:first-child),
-.chat-transcript [data-streamdown="table-cell"]:not(:first-child) {
+/* Value columns (numbers, rates, amounts) stay on one line; text columns wrap, with a minimum
+   width so no column is squeezed to a word per line. */
+.chat-transcript [data-kind="value"] {
   white-space: nowrap;
+}
+
+.chat-transcript [data-kind="text"] {
+  min-width: 7.5rem;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 /* Column resize handle on assistant table headers; once a column is resized the table switches

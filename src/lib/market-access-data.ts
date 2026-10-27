@@ -6,6 +6,7 @@ import {
   sum,
   type LaunchData,
 } from "@/lib/launch-data";
+import { nationalPaRaw, type PaDenial, type PaRaw } from "@/lib/pa-data";
 import type { PeriodWindow } from "@/lib/scope";
 
 // Market Access figures reuse the launch control totals (referrals, first doses, active
@@ -38,6 +39,8 @@ export type MarketAccessRaw = {
   stopReasons: { reason: string; cancelled: number; discontinued: number }[];
   restarts: { patients: number; reason: string; medianDaysOff: number };
   inventory: { location: string; paid: number; free: number }[];
+  // Prior authorization submissions, first-pass decisions, denials and appeals.
+  pa: PaRaw;
 };
 
 export const nationalMarketAccessRaw: MarketAccessRaw = {
@@ -71,8 +74,8 @@ export const nationalMarketAccessRaw: MarketAccessRaw = {
     { month: "Apr", firstApprovedPa: 16, firstDose: 31 },
     { month: "May", firstApprovedPa: 14, firstDose: 28 },
     { month: "Jun", firstApprovedPa: 13, firstDose: 26 },
-    { month: "Jul", firstApprovedPa: 12, firstDose: 24 },
-    { month: "Aug", firstApprovedPa: 11, firstDose: 23 },
+    { month: "Jul", firstApprovedPa: 15, firstDose: 26 },
+    { month: "Aug", firstApprovedPa: 18, firstDose: 29 },
   ],
   timeToTherapyMedians: {
     firstApprovedPa: { mean: 18, median: 15 },
@@ -106,6 +109,7 @@ export const nationalMarketAccessRaw: MarketAccessRaw = {
     { location: "Midwest sites", paid: 1, free: 1 },
     { location: "West sites", paid: 3, free: 1 },
   ],
+  pa: nationalPaRaw,
 };
 
 export function buildMarketAccessData(
@@ -167,12 +171,90 @@ export function buildMarketAccessData(
     paidKnownPct: pct(startedPaid, knownOutcomes),
   };
 
+  // First-pass PA decisions by submission month. A denial overturned on appeal still counts as a
+  // first-pass denial here, but as an approval in the referral funnel.
+  const share = (part: number, whole: number) => (whole ? Math.round((part / whole) * 100) : 0);
+  const allPaMonths = raw.pa.months.map((row) => {
+    const denied = raw.pa.denials.filter((denial) => denial.month === row.month).length;
+    const decided = row.submitted - row.awaiting;
+    return {
+      ...row,
+      denied,
+      decided,
+      approved: decided - denied,
+      firstPassPct: share(decided - denied, decided),
+    };
+  });
+  const paMonths = inPeriod(allPaMonths);
+  const firstPassOf = (rows: typeof allPaMonths) =>
+    share(sum(rows.map((row) => row.approved)), sum(rows.map((row) => row.decided)));
+  const periodMonthNames = new Set(paMonths.map((row) => row.month));
+  const periodDenials = raw.pa.denials.filter((denial) => periodMonthNames.has(denial.month));
+  const countBy = (rows: PaDenial[], key: "reason" | "payer" | "region" | "site") =>
+    [...new Set(rows.map((row) => row[key]))]
+      .map((label) => ({ label, value: rows.filter((row) => row[key] === label).length }))
+      .sort((a, b) => b.value - a.value);
+  const documentationReasons = [
+    "Missing confirmatory test result",
+    "Baseline functional score not attached",
+    "Incomplete form",
+  ];
+  const siteGroup = (preReview: boolean) => {
+    const rows = raw.pa.sites.filter((row) => row.hubPreReview === preReview);
+    const submitted = sum(rows.map((row) => row.submitted));
+    const denied = sum(rows.map((row) => row.denied));
+    const decided = submitted - sum(rows.map((row) => row.awaiting));
+    return {
+      sites: rows.length,
+      submitted,
+      denied,
+      firstPassPct: share(decided - denied, decided),
+    };
+  };
+  const appeals = {
+    filed: raw.pa.denials.length,
+    overturned: raw.pa.denials.filter((row) => row.appeal === "overturned").length,
+    upheld: raw.pa.denials.filter((row) => row.appeal === "upheld").length,
+    pending: raw.pa.denials.filter((row) => row.appeal === "pending").length,
+    medianDaysAdded: raw.pa.appealMedianDays,
+  };
+
+  const paAnalysis = {
+    months: paMonths,
+    submitted: sum(paMonths.map((row) => row.submitted)),
+    approvedFirstPass: sum(paMonths.map((row) => row.approved)),
+    denied: sum(paMonths.map((row) => row.denied)),
+    awaiting: sum(paMonths.map((row) => row.awaiting)),
+    firstPassPct: firstPassOf(paMonths),
+    firstPassH1: firstPassOf(allPaMonths.slice(0, 6)),
+    firstPassQ3: firstPassOf(allPaMonths.slice(6, 9)),
+    denialsByReason: countBy(periodDenials, "reason"),
+    denialsByPayer: countBy(periodDenials, "payer"),
+    denialsByRegion: countBy(periodDenials, "region"),
+    denialsBySite: countBy(periodDenials, "site"),
+    documentationDenials: periodDenials.filter((row) => documentationReasons.includes(row.reason))
+      .length,
+    appeals: {
+      ...appeals,
+      decided: appeals.overturned + appeals.upheld,
+      overturnedOfDecidedPct: share(appeals.overturned, appeals.overturned + appeals.upheld),
+    },
+    q3Sites: raw.pa.sites.map((row) => ({
+      ...row,
+      firstPassPct: share(row.submitted - row.awaiting - row.denied, row.submitted - row.awaiting),
+    })),
+    q3SitesWithPreReview: siteGroup(true),
+    q3SitesWithoutPreReview: siteGroup(false),
+    policyNote: raw.pa.policyNote,
+  };
+
   const priorAuth = {
     submitted: funnel.benefitsVerified,
     approved: funnel.paApproved,
     denied: cancelledByStep.priorAuthorization,
     pending: sum(Object.values(pendingByStep.priorAuthorization)),
     approvalPct: pct(funnel.paApproved, funnel.benefitsVerified),
+    firstPassPct: paAnalysis.firstPassPct,
   };
 
   // Referral months stop at August, so a Monthly view shows the latest matured month.
@@ -259,7 +341,12 @@ export function buildMarketAccessData(
     inventory,
     marketAccessKpis,
     channelBalance,
-    trend: { vialsAdministered: allAdministered, timeToTherapy: raw.timeToTherapy },
+    paAnalysis,
+    trend: {
+      vialsAdministered: allAdministered,
+      timeToTherapy: raw.timeToTherapy,
+      paMonths: allPaMonths,
+    },
   };
 }
 
@@ -283,4 +370,5 @@ export const {
   inventory,
   marketAccessKpis,
   channelBalance,
+  paAnalysis,
 } = buildMarketAccessData(buildLaunchData(nationalLaunchRaw), nationalMarketAccessRaw);

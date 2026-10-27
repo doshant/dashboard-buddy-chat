@@ -23,6 +23,7 @@ import {
   trafficOutlook,
 } from "@/lib/outlook-data";
 import { buildDashboardData } from "@/lib/scoped-data";
+import { simulatorBaseline, simulatorSummary } from "@/lib/simulator-data";
 import type { Scope } from "@/lib/scope";
 
 // The data the live assistant answers from: the figures for the selected geography and period,
@@ -49,7 +50,13 @@ export function buildAssistantContext(scope: Scope, allowedPanels: readonly Pane
     },
     allowedTabs: allowedPanels.filter((panel) => panel !== "Overview"),
     restrictedTabs: (
-      ["Executive Summary", "Market Access", "Marketing", "Field Activity"] as const
+      [
+        "Executive Summary",
+        "Market Access",
+        "Marketing",
+        "Field Activity",
+        "What-If Simulator",
+      ] as const
     ).filter((panel) => !can(panel)),
     ...(can("Executive Summary") && {
       executiveSummary: {
@@ -126,6 +133,10 @@ export function buildAssistantContext(scope: Scope, allowedPanels: readonly Pane
         referralOutcomes: marketAccess.referralOutcomes,
         conversion: marketAccess.conversion,
         priorAuth: marketAccess.priorAuth,
+        // First-pass PA decisions and denials for the selected scope; Q3 site table and appeals are
+        // since the Jul 1 payer policy change. priorAuth.approvalPct is approval after appeal.
+        priorAuthFirstPass: marketAccess.paAnalysis,
+        priorAuthFirstPassByMonthSinceLaunch: marketAccess.trend.paMonths,
         timeToTherapyByReferralMonth: marketAccess.trend.timeToTherapy,
         timeToTherapySummary: marketAccess.timeToTherapySummary,
         payerMixReferred: marketAccess.payerMixReferred,
@@ -167,6 +178,14 @@ export function buildAssistantContext(scope: Scope, allowedPanels: readonly Pane
         engagementFunnel: field.engagementFunnel,
         regionalSummary: [...regional.field.rows, regional.field.total],
       },
+    }),
+    // Rule-based what-if scenarios for the selected geography, from launch-to-date figures.
+    ...(can("What-If Simulator") && {
+      whatIfSimulator: simulatorSummary(
+        simulatorBaseline(
+          buildDashboardData({ geography: scope.geography, period: "Launch to Date" }),
+        ),
+      ),
     }),
     // Precomputed projections and recommendations (national, launch to date). Quote these rather
     // than recalculating, so live answers agree with the dashboard.

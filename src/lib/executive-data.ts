@@ -109,6 +109,8 @@ export function buildExecutiveData(input: ExecutiveInput) {
   const referredToDate = cumulative(referrals.referralsByMonth);
   const startedToDate = cumulative(startsByMonth);
   const cancelledToDate = cumulative(referrals.cancellationsByMonth);
+  // First-pass PA approval fell in Q3; both Executive cards that mention PA show the drop.
+  const firstPassTrend = `${marketAccess.paAnalysis.firstPassH1}% H1 → ${marketAccess.paAnalysis.firstPassQ3}% Q3`;
   const fillAndAbandonByMonth = referredToDate.map((referred, i) => ({
     month: newPatients[i]?.month ?? `M${i + 1}`,
     referred,
@@ -293,9 +295,9 @@ export function buildExecutiveData(input: ExecutiveInput) {
             badge: { text: `${lpPending} at procedure scheduling`, tone: "watch" },
           },
           {
-            label: "PA approval rate",
-            value: `${priorAuth.approvalPct}%`,
-            badge: { text: `Median ${timeToTherapySummary.firstApprovedPa.median}d`, tone: "good" },
+            label: "PA first-pass approval",
+            value: `${marketAccess.paAnalysis.firstPassPct}%`,
+            badge: { text: firstPassTrend, tone: "bad" },
           },
           {
             label: "Median days to first dose",
@@ -439,9 +441,9 @@ export function buildExecutiveData(input: ExecutiveInput) {
           },
         },
         {
-          label: "PA approval rate",
-          value: `${priorAuth.approvalPct}%`,
-          badge: { text: `${priorAuth.approved} of ${priorAuth.submitted}`, tone: "good" },
+          label: "PA first-pass approval",
+          value: `${marketAccess.paAnalysis.firstPassPct}%`,
+          badge: { text: firstPassTrend, tone: "bad" },
         },
       ],
     },
