@@ -375,7 +375,7 @@ function LaunchTracker() {
     visiblePanels.find((item) => item.label === activePanel) ?? visiblePanels[0] ?? panels[0]!;
   const PanelIcon = panel.icon;
   const panelFilters = panel.filters ?? { geography: true, period: true };
-  const starterQuestions = starterQuestionsFor(panel.label, profile.panels);
+  const starterQuestions = starterQuestionsFor(panel.label, profile.panels, scenario);
   const attentionSignals = attentionSignalsFor(panel.label, profile.panels);
   const isRestricted = visiblePanels.length < shownPanels.length;
 

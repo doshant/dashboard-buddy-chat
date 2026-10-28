@@ -191,17 +191,24 @@ export function questionKind(question: string): QuestionKind {
 export const marketingWhatIfQuestions = [
   "What if paid search clicks go back to 6,020?",
   "What if social impressions rise 20%?",
-  "What if the HCP email open rate rises to 30%?",
+  "What if the HCP email click rate rises to 4.5%?",
   "What if social impressions fall 10% and search clicks rise to 5,000?",
 ];
 
-// The What-If Simulator's questions follow the profile's levers: Marketing, Market Access or both.
-export function starterQuestionsFor(panel: string, panels: readonly PanelLabel[] = panelLabels) {
+// The What-If Simulator's questions follow the levers on screen (`scenario`), so Marketing and
+// Market Access questions never mix; without one, they follow the profile's levers.
+export function starterQuestionsFor(
+  panel: string,
+  panels: readonly PanelLabel[] = panelLabels,
+  scenario?: "Marketing" | "Market Access",
+) {
   if (panel === "What-If Simulator") {
     const marketing = panels.includes("Marketing") ? marketingWhatIfQuestions : [];
     const access = panels.includes("Market Access")
       ? (starterQuestionsByPanel["What-If Simulator"] ?? [])
       : [];
+    if (scenario === "Marketing" && marketing.length) return marketing;
+    if (scenario === "Market Access" && access.length) return access;
     return marketing.length && access.length
       ? [...marketing.slice(0, 2), ...access.slice(0, 2)]
       : [...marketing, ...access];
@@ -1443,7 +1450,7 @@ const forwardFollowUps: Partial<Record<Topic, ForwardTopic[]>> = {
   priorAuth: ["paDenials", "timeOutlook", "paDenialActions"],
   paSites: ["paDenialActions", "timeOutlook"],
   timeToDose: ["timeOutlook", "timeToDoseActions"],
-  payerMix: ["supplyOutlook", "freeToPaidActions"],
+  payerMix: ["supplyOutlook", "paDenialActions"],
   stops: ["timeOutlook", "stopActions"],
   inventory: ["inventoryRisk", "timeToDoseActions"],
   socialMedia: ["mediaOutlook", "marketingActions"],
@@ -1472,10 +1479,25 @@ export function canAsk(question: string, allowedPanels: readonly PanelLabel[]) {
   return canAnswer(topicFor(question), allowedPanels);
 }
 
-// Keeps follow-up suggestions inside the profile's access, topping up from its own tabs.
-function permittedSuggestions(suggestions: string[], allowedPanels: readonly PanelLabel[]) {
-  const starters = allowedPanels.flatMap((panel) => starterQuestionsByPanel[panel] ?? []);
-  const pool = [...suggestions, ...starters].filter((question) => canAsk(question, allowedPanels));
+// Keeps follow-up suggestions inside the profile's access and, for answers from a single tab such
+// as Marketing or Market Access, inside that tab so their questions don't mix. Executive Summary
+// answers span the launch, so they can lead into other tabs. Tops up from the tab's own starters.
+function permittedSuggestions(
+  suggestions: string[],
+  allowedPanels: readonly PanelLabel[],
+  home: readonly PanelLabel[] | null = null,
+) {
+  const tabSpecific = home && !home.includes("Executive Summary");
+  const homePanels = tabSpecific ? allowedPanels.filter((panel) => home.includes(panel)) : [];
+  const sameTab = (question: string) =>
+    !homePanels.length ||
+    (topicPanels[topicFor(question)] ?? []).some((panel) => homePanels.includes(panel));
+  const starters = (homePanels.length ? homePanels : allowedPanels).flatMap(
+    (panel) => starterQuestionsByPanel[panel] ?? [],
+  );
+  const pool = [...suggestions, ...starters].filter(
+    (question) => canAsk(question, allowedPanels) && sameTab(question),
+  );
   return [...new Set(pool)].slice(0, 3);
 }
 
@@ -1498,6 +1520,10 @@ export function resolveDashboardAnswer(
   return {
     title: answer.title,
     response: answer.response,
-    suggestions: permittedSuggestions([...forward, ...answer.suggestions], allowedPanels),
+    suggestions: permittedSuggestions(
+      [...forward, ...answer.suggestions],
+      allowedPanels,
+      topicPanels[topic],
+    ),
   };
 }

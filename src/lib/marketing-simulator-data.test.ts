@@ -22,7 +22,6 @@ describe("What-If Simulator, Marketing levers", () => {
     expect(nation.levers).toEqual({
       socialImpressionsK: 770,
       searchClicks: 3_400,
-      emailOpenRatePct: 26,
       emailClickRatePct: 3.5,
     });
     const today = simulateMarketing(nation, nation.levers);
@@ -42,31 +41,11 @@ describe("What-If Simulator, Marketing levers", () => {
     expect(search.deltaSpendSixMonths).toBeCloseTo(search.deltaSpend * 6, 2);
   });
 
-  it("changes email results, not spend, when the email rates move", () => {
-    const result = simulateMarketing(nation, {
-      ...nation.levers,
-      emailOpenRatePct: 30,
-      emailClickRatePct: 4.5,
-    });
+  it("changes email results, not spend, when the click rate moves", () => {
+    const result = simulateMarketing(nation, { ...nation.levers, emailClickRatePct: 4.5 });
     expect(result.deltaSpend).toBe(0);
     expect(result.visits).toBeGreaterThan(result.visitsToday);
     expect(result.costPerVisit).toBeLessThan(result.costPerVisitToday);
-    const email = result.channels.find((row) => row.key === "email")!;
-    expect(email.opens).toBeGreaterThan(email.opensToday ?? 0);
-  });
-
-  it("caps email clicks at opens", () => {
-    const capped = simulateMarketing(nation, {
-      ...nation.levers,
-      emailOpenRatePct: 2,
-      emailClickRatePct: 10,
-    });
-    const atOpenRate = simulateMarketing(nation, {
-      ...nation.levers,
-      emailOpenRatePct: 2,
-      emailClickRatePct: 2,
-    });
-    expect(capped.visits).toBe(atOpenRate.visits);
   });
 
   it("keeps every geography's baseline and presets inside the slider ranges", () => {
@@ -110,8 +89,8 @@ describe("What-If Simulator, Marketing levers", () => {
     expect(levers("What if social impressions go to 1M?")).toMatchObject({
       socialImpressionsK: 1_000,
     });
-    expect(levers("What if the HCP email open rate rises to 30%?")).toMatchObject({
-      emailOpenRatePct: 30,
+    expect(levers("What if the HCP email click rate rises to 4.5%?")).toMatchObject({
+      emailClickRatePct: 4.5,
     });
     expect(levers("What if the email click rate improves by 1%?")).toMatchObject({
       emailClickRatePct: 4.5,
@@ -119,7 +98,6 @@ describe("What-If Simulator, Marketing levers", () => {
     expect(levers("What if social impressions fall 10% and search clicks rise to 5,000?")).toEqual({
       socialImpressionsK: 690,
       searchClicks: 5_000,
-      emailOpenRatePct: 26,
       emailClickRatePct: 3.5,
     });
     expect(parseMarketingWhatIf("How are our emails performing?", nation)).toBeNull();

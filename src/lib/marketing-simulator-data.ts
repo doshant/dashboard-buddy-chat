@@ -1,7 +1,7 @@
 // What-If Simulator, Marketing scenario: how monthly marketing spend changes when the volumes and
-// rates move. The inputs are social media impressions, paid search clicks and the HCP email open
-// and click rates. Spend follows how each channel is bought: social per 1,000 impressions, search
-// per click and HCP email per email sent, so the email rates change results, not spend. Baselines
+// rates move. The inputs are social media impressions, paid search clicks and the HCP email click
+// rate. Spend follows how each channel is bought: social per 1,000 impressions, search per click
+// and HCP email per email sent, so the email click rate changes results, not spend. Baselines
 // are the selected geography's latest month, so "today" matches the Marketing tab.
 
 import { marketingWhatIfQuestions } from "@/lib/dashboard-data";
@@ -13,7 +13,6 @@ import { downWords, improveWords, simulatorMonths, upWords, whatIfCue } from "@/
 export type MarketingLevers = {
   socialImpressionsK: number;
   searchClicks: number;
-  emailOpenRatePct: number;
   emailClickRatePct: number;
 };
 
@@ -32,7 +31,6 @@ export function marketingBaseline(data: DashboardData) {
     levers: {
       socialImpressionsK: social.impressionsK,
       searchClicks: search.clicks,
-      emailOpenRatePct: email.openRate,
       emailClickRatePct: email.clickRate,
     } satisfies MarketingLevers,
     // Social site visits per impression this month.
@@ -47,7 +45,7 @@ export function marketingBaseline(data: DashboardData) {
 export type MarketingBaseline = ReturnType<typeof marketingBaseline>;
 
 // Slider ranges: volumes up to double today's (search far enough to win back its best month);
-// open rate up to at least 60% and click rate up to at least 15%.
+// click rate up to at least 15%.
 export function marketingLeverRanges({ levers, searchPeak }: MarketingBaseline) {
   return {
     socialImpressionsK: { min: 0, max: Math.ceil((levers.socialImpressionsK * 2) / 100) * 100 },
@@ -55,22 +53,18 @@ export function marketingLeverRanges({ levers, searchPeak }: MarketingBaseline) 
       min: 0,
       max: Math.ceil(Math.max(levers.searchClicks * 2, searchPeak.clicks * 1.5) / 1000) * 1000,
     },
-    emailOpenRatePct: { min: 0, max: Math.max(60, Math.ceil(levers.emailOpenRatePct * 2)) },
     emailClickRatePct: { min: 0, max: Math.max(15, Math.ceil(levers.emailClickRatePct * 2)) },
   };
 }
 
 // One month of spend and site visits for each channel at the given levers.
 function month(baseline: MarketingBaseline, levers: MarketingLevers) {
-  // A click needs an open, so the click rate can't exceed the open rate.
-  const clickRate = Math.min(levers.emailClickRatePct, levers.emailOpenRatePct);
   return [
     {
       key: "email",
       label: "HCP email",
       spend: baseline.emailSent * spendRates.emailPerSend,
-      visits: Math.round((baseline.emailDelivered * clickRate) / 100),
-      opens: Math.round((baseline.emailDelivered * levers.emailOpenRatePct) / 100),
+      visits: Math.round((baseline.emailDelivered * levers.emailClickRatePct) / 100),
     },
     {
       key: "social",
@@ -102,7 +96,6 @@ export function simulateMarketing(baseline: MarketingBaseline, levers: Marketing
       ...row,
       spendToday: today[i]!.spend,
       visitsToday: today[i]!.visits,
-      opensToday: today[i]!.opens,
       costPerVisit: row.visits ? cents(row.spend / row.visits) : null,
       costPerVisitToday: today[i]!.visits ? cents(today[i]!.spend / today[i]!.visits) : null,
     })),
@@ -160,7 +153,7 @@ export function marketingSimulatorSummary(baseline: MarketingBaseline) {
     rules: [
       `Social spend is impressions × $${spendRates.socialCpm.toFixed(2)} per 1,000.`,
       `Paid search spend is clicks × $${baseline.searchCpc.toFixed(2)}, this month's cost per click.`,
-      `HCP email spend is ${baseline.emailSent.toLocaleString("en-US")} emails a month × $${spendRates.emailPerSend.toFixed(2)}; open and click rates change site visits and cost per visit, not spend.`,
+      `HCP email spend is ${baseline.emailSent.toLocaleString("en-US")} emails a month × $${spendRates.emailPerSend.toFixed(2)}; the click rate changes site visits and cost per visit, not spend.`,
       "Each social, search and email click is a site visit.",
     ],
     scenarios: marketingPresets(baseline).map(({ label, levers }) => {
@@ -206,7 +199,6 @@ type LeverKey = keyof MarketingLevers;
 
 const leverPatterns: { key: LeverKey; pattern: RegExp }[] = [
   { key: "searchClicks", pattern: /paid search(?: clicks?)?|search clicks?|\bsearch\b/g },
-  { key: "emailOpenRatePct", pattern: /(?:email )?open rate|opens?\b/g },
   { key: "emailClickRatePct", pattern: /(?:email )?click rate|email clicks?|\bemail\b/g },
   { key: "socialImpressionsK", pattern: /social(?: media)?(?: impressions?)?|impressions?/g },
 ];
@@ -214,7 +206,6 @@ const leverPatterns: { key: LeverKey; pattern: RegExp }[] = [
 const leverNames: Record<LeverKey, string> = {
   socialImpressionsK: "Social impressions a month",
   searchClicks: "Paid search clicks a month",
-  emailOpenRatePct: "HCP email open rate",
   emailClickRatePct: "HCP email click rate",
 };
 const leverValue = (key: LeverKey, value: number) =>

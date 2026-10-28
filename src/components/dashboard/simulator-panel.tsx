@@ -156,26 +156,13 @@ function MarketingSimulator({ baseline, where }: { baseline: MarketingBaseline; 
             onChange={(value) => set({ searchClicks: value })}
           />
           <Lever
-            label="HCP Email Open Rate"
-            value={levers.emailOpenRatePct}
-            display={percent(levers.emailOpenRatePct)}
-            delta={round1(levers.emailOpenRatePct - base.emailOpenRatePct)}
-            unit="%"
-            baseline={`${percent(base.emailOpenRatePct)} of ${baseline.emailDelivered.toLocaleString("en-US")} delivered HCP emails are opened`}
-            rule="Email is paid per send, so the rate changes results, not spend"
-            range={ranges.emailOpenRatePct}
-            formatBound={(value) => `${value}%`}
-            step={0.5}
-            onChange={(value) => set({ emailOpenRatePct: round1(value) })}
-          />
-          <Lever
             label="HCP Email Click Rate"
             value={levers.emailClickRatePct}
             display={percent(levers.emailClickRatePct)}
             delta={round1(levers.emailClickRatePct - base.emailClickRatePct)}
             unit="%"
             baseline={`${percent(base.emailClickRatePct)} of delivered HCP emails are clicked`}
-            rule="Each click is a site visit; capped at the open rate. Spend is unchanged"
+            rule="Email is paid per send, so the click rate changes site visits, not spend"
             range={ranges.emailClickRatePct}
             formatBound={(value) => `${value}%`}
             step={0.1}
@@ -491,7 +478,7 @@ function SimulatorLayout<Levers>({
           ))}
         </div>
 
-        {/* Four equal rows, so the levers share the pane height evenly. */}
+        {/* Equal rows, so the levers share the pane height evenly. */}
         <div className="grid flex-1 auto-rows-fr gap-3">{levers}</div>
       </DashboardPanel>
 
@@ -646,12 +633,12 @@ function Lever({
   onChange: (value: number) => void;
 }) {
   return (
-    <div className="flex flex-col justify-center gap-2 rounded-lg border border-border bg-secondary/30 px-3.5 py-3">
+    <div className="flex flex-col justify-center gap-2.5 rounded-lg border border-border bg-secondary/30 px-4 py-3.5">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-xs font-semibold">{label}</span>
-        <span className="text-xs tabular-nums">
+        <span className="text-sm font-semibold">{label}</span>
+        <span className="text-base tabular-nums">
           {delta !== 0 && (
-            <span className="mr-1.5 text-[11px] text-muted-foreground">{signed(delta, unit)}</span>
+            <span className="mr-1.5 text-xs text-muted-foreground">{signed(delta, unit)}</span>
           )}
           <span className="font-bold text-primary">{display}</span>
         </span>
@@ -664,15 +651,18 @@ function Lever({
         step={step}
         onValueChange={([next]) => next !== undefined && onChange(next)}
       />
-      <div className="flex justify-between text-[10px] tabular-nums text-muted-foreground">
+      <div className="flex justify-between text-[11px] tabular-nums text-muted-foreground">
         <span>{formatBound(range.min)}</span>
         <span>{formatBound(range.max)}</span>
       </div>
-      <p className="text-[11px] leading-snug text-muted-foreground">
-        <span className="font-medium text-foreground">Today:</span> {baseline}
-        <br />
-        <span className="font-medium text-foreground">Rule:</span> {rule}
-      </p>
+      <div className="space-y-1.5 text-[13px] leading-relaxed text-muted-foreground">
+        <p>
+          <span className="font-semibold text-foreground">Today:</span> {baseline}
+        </p>
+        <p>
+          <span className="font-semibold text-foreground">Rule:</span> {rule}
+        </p>
+      </div>
     </div>
   );
 }
