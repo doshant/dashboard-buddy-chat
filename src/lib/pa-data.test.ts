@@ -34,7 +34,13 @@ describe("PA denial scenario data", () => {
     expect(q3.denialsByPayer[0]).toEqual({ label: "Medicare Advantage", value: 8 });
     expect(pa.q3SitesWithoutPreReview).toMatchObject({ sites: 3, denied: 8, firstPassPct: 11 });
     expect(pa.q3SitesWithPreReview.firstPassPct).toBe(87);
-    expect(pa.appeals).toMatchObject({ overturned: 11, upheld: 1, pending: 1, decided: 12, overturnedOfDecidedPct: 92 });
+    expect(pa.appeals).toMatchObject({
+      overturned: 11,
+      upheld: 1,
+      pending: 1,
+      decided: 12,
+      overturnedOfDecidedPct: 92,
+    });
   });
 
   it("follows the region filter: the Southeast carries half of Q3's denials", () => {

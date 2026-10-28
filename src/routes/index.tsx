@@ -37,16 +37,22 @@ import { Conversation, ConversationContent } from "@/components/ai-elements/conv
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import {
   PromptInput,
-  PromptInputFooter,
   PromptInputSubmit,
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input";
+import { InputGroupAddon } from "@/components/ui/input-group";
 import { ChatSuggestion } from "@/components/chat-suggestion";
 import { ChatTableCell, ResizableHeaderCell } from "@/components/chat-table";
 import { DashboardDataProvider } from "@/components/dashboard/dashboard-data-context";
 import { ExecutivePanel } from "@/components/dashboard/executive-panel";
 import { FieldPanel } from "@/components/dashboard/field-panel";
-import { SimulatorLeversContext, SimulatorPanel } from "@/components/dashboard/simulator-panel";
+import {
+  SimulatorLeversContext,
+  SimulatorPanel,
+  simulatorScenarios,
+  type SimulatorScenario,
+} from "@/components/dashboard/simulator-panel";
+import { marketingWhatIfFor, type MarketingLevers } from "@/lib/marketing-simulator-data";
 import { MarketAccessPanel } from "@/components/dashboard/market-access-panel";
 import { MarketingPanel } from "@/components/dashboard/marketing-panel";
 import { OverviewPanel } from "@/components/dashboard/overview-panel";
@@ -144,13 +150,22 @@ const chatTableComponents = {
   blockquote: ChatSuggestion,
 };
 
-// Live answers stream from Claude. Preset (fallback) replies are "thought about" for at least
-// this long, then typed out a word at a time.
-const replyThinkingMs = 2000;
-const replyWordMs = 28;
+// Every reply, live or preset, is "thought about" for at least this long, then typed out a word at
+// a time at a steady pace, with a short beat at each new line. A live answer keeps arriving while it
+// types; if the typing catches up, it waits for the next words.
+const replyThinkingMs = 2500;
+const replyWordMs = 40;
+const replyLineMs = 120;
 
-function wordEnds(text: string) {
-  return Array.from(text.matchAll(/\S+\s*/g), (match) => match.index + match[0].length);
+// Where the next whole word after `from` ends, or null if there isn't one yet. While text is still
+// arriving, the last word may be cut off, so it waits.
+function nextWordEnd(text: string, from: number, complete: boolean) {
+  const word = /\S+\s*/g;
+  word.lastIndex = from;
+  const match = word.exec(text);
+  if (!match) return null;
+  const end = match.index + match[0].length;
+  return end === text.length && !complete ? null : { end, newLine: match[0].includes("\n") };
 }
 
 function clampChatWidth(width: number, docked: boolean) {
@@ -176,15 +191,15 @@ const panels: {
     hidden: true,
     filters: { geography: false, period: false },
   },
-  { label: "Market Access", icon: ShieldCheck, Content: MarketAccessPanel },
-  { label: "Marketing", icon: Megaphone, Content: MarketingPanel },
-  { label: "Field Activity", icon: MapPinned, Content: FieldPanel },
   {
     label: "What-If Simulator",
     icon: SlidersHorizontal,
     Content: SimulatorPanel,
     filters: { geography: true, period: false },
   },
+  { label: "Marketing", icon: Megaphone, Content: MarketingPanel },
+  { label: "Market Access", icon: ShieldCheck, Content: MarketAccessPanel },
+  { label: "Field Activity", icon: MapPinned, Content: FieldPanel },
 ];
 
 function LaunchTracker() {
@@ -202,14 +217,36 @@ function LaunchTracker() {
       }),
     [geographyName, timePeriod, month],
   );
-  // What-If Simulator levers; null means today's values. A new geography starts over.
-  const [simulatorLevers, setSimulatorLevers] = useState<SimulatorLevers | null>(null);
-  const simulatorState = useMemo(
-    () => ({ levers: simulatorLevers, setLevers: setSimulatorLevers }),
-    [simulatorLevers],
-  );
-  useEffect(() => setSimulatorLevers(null), [geographyName]);
   const [profileId, setProfileId] = useState(profiles[0]!.id);
+  // What-If Simulator: which levers it shows (Marketing first) and their values; null means
+  // today's values. Each profile gets the scenarios for the tabs it can open. A new geography
+  // starts over.
+  const [simulatorLevers, setSimulatorLevers] = useState<SimulatorLevers | null>(null);
+  const [marketingLevers, setMarketingLevers] = useState<MarketingLevers | null>(null);
+  const [chosenScenario, setScenario] = useState<SimulatorScenario>("Marketing");
+  const scenarios = useMemo(() => {
+    const allowed = profiles.find((item) => item.id === profileId)?.panels ?? [];
+    return simulatorScenarios.filter((item) => allowed.includes(item));
+  }, [profileId]);
+  const scenario = scenarios.includes(chosenScenario)
+    ? chosenScenario
+    : (scenarios[0] ?? "Market Access");
+  const simulatorState = useMemo(
+    () => ({
+      scenarios,
+      scenario,
+      setScenario,
+      levers: simulatorLevers,
+      setLevers: setSimulatorLevers,
+      marketingLevers,
+      setMarketingLevers,
+    }),
+    [scenarios, scenario, simulatorLevers, marketingLevers],
+  );
+  useEffect(() => {
+    setSimulatorLevers(null);
+    setMarketingLevers(null);
+  }, [geographyName]);
   const [activePanel, setActivePanel] = useState<PanelLabel>("Executive Summary");
   // Wide screens start with the assistant docked open; narrow screens start with it closed.
   const [docked, setDocked] = useState(true);
@@ -248,9 +285,29 @@ function LaunchTracker() {
       cancelled = true;
     };
   }, []);
-  // The assistant message being revealed: 0 characters shown means it is still "thinking";
-  // -1 means a live answer is streaming in.
+
+  // Lets the server get ready for questions in this profile and scope, so the first answer starts
+  // sooner. A failed warm-up changes nothing.
+  useEffect(() => {
+    if (assistantMode !== "live") return;
+    fetch("/api/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        warmUp: true,
+        profileId,
+        scope: {
+          geography: geographyName,
+          period: timePeriod,
+          ...(timePeriod === "Monthly" && { month }),
+        },
+      }),
+    }).catch(() => {});
+  }, [assistantMode, profileId, geographyName, timePeriod, month]);
+  // The assistant message being revealed: 0 characters shown means it is still "thinking".
   const [reply, setReply] = useState<{ id: number; shown: number } | null>(null);
+  // The reply's text received so far, and whether all of it has arrived.
+  const replyText = useRef<{ id: number; text: string; complete: boolean } | undefined>(undefined);
   const replyTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const replyRequest = useRef<AbortController | undefined>(undefined);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -318,7 +375,7 @@ function LaunchTracker() {
     visiblePanels.find((item) => item.label === activePanel) ?? visiblePanels[0] ?? panels[0]!;
   const PanelIcon = panel.icon;
   const panelFilters = panel.filters ?? { geography: true, period: true };
-  const starterQuestions = starterQuestionsFor(panel.label);
+  const starterQuestions = starterQuestionsFor(panel.label, profile.panels);
   const attentionSignals = attentionSignalsFor(panel.label, profile.panels);
   const isRestricted = visiblePanels.length < shownPanels.length;
 
@@ -336,6 +393,7 @@ function LaunchTracker() {
     clearTimeout(replyTimer.current);
     replyRequest.current?.abort();
     replyRequest.current = undefined;
+    replyText.current = undefined;
     setReply(null);
   }
 
@@ -383,21 +441,19 @@ function LaunchTracker() {
         if (done) break;
         text += decoder.decode(value, { stream: true });
         updateMessage(id, { text, source: "claude" });
-        setReply({ id, shown: -1 });
+        if (replyText.current?.id === id) replyText.current.text = text;
       }
     } catch {
       // A dropped stream keeps whatever arrived; with nothing yet, fall back.
     }
     if (!text) return "failed";
-    setReply((current) => (current?.id === id ? null : current));
+    if (replyText.current?.id === id) replyText.current.complete = true;
     return "answered";
   }
 
-  function showPresetAnswer(id: number, response: string, startedAt: number, fallback: boolean) {
+  function showPresetAnswer(id: number, response: string, fallback: boolean) {
     updateMessage(id, { text: response, source: "preset", fallback });
-    const ends = wordEnds(response);
-    const wait = Math.max(0, replyThinkingMs - (Date.now() - startedAt));
-    replyTimer.current = setTimeout(() => typeReply(id, ends, 0), wait);
+    if (replyText.current?.id === id) replyText.current = { id, text: response, complete: true };
   }
 
   function clearChat() {
@@ -405,22 +461,40 @@ function LaunchTracker() {
     setMessages([]);
   }
 
-  function typeReply(id: number, ends: number[], step: number) {
-    if (step >= ends.length) {
-      setReply(null);
+  function typeReply(id: number, shown: number) {
+    const incoming = replyText.current;
+    if (incoming?.id !== id) return;
+    const next = nextWordEnd(incoming.text, shown, incoming.complete);
+    if (!next) {
+      if (incoming.complete) {
+        replyText.current = undefined;
+        setReply(null);
+      } else {
+        replyTimer.current = setTimeout(() => typeReply(id, shown), replyWordMs);
+      }
       return;
     }
-    setReply({ id, shown: ends[step]! });
-    replyTimer.current = setTimeout(() => typeReply(id, ends, step + 1), replyWordMs);
+    setReply({ id, shown: next.end });
+    replyTimer.current = setTimeout(
+      () => typeReply(id, next.end),
+      next.newLine ? replyLineMs : replyWordMs,
+    );
   }
 
   function sendQuestion(question: string) {
     finishReply();
     // A what-if question sets the simulator's sliders and is answered from the same model, so the
-    // reply always matches the tab.
-    const whatIf = profile.panels.includes("What-If Simulator")
+    // reply always matches the tab. It uses the levers of the profile's own tabs.
+    const can = (label: PanelLabel) =>
+      profile.panels.includes("What-If Simulator") && profile.panels.includes(label);
+    const accessWhatIf = can("Market Access")
       ? whatIfFor(question, geographyName as Geography)
       : null;
+    const marketingWhatIf =
+      !accessWhatIf && can("Marketing")
+        ? marketingWhatIfFor(question, geographyName as Geography)
+        : null;
+    const whatIf = accessWhatIf ?? marketingWhatIf;
     // The preset answer supplies the download title and follow-up suggestions, and is the
     // fallback text when no live answer is available.
     const preset = whatIf?.answer ?? resolveDashboardAnswer(question, profile.panels);
@@ -445,16 +519,23 @@ function LaunchTracker() {
       },
     ]);
     setReply({ id: replyId, shown: 0 });
+    replyText.current = { id: replyId, text: "", complete: false };
+    replyTimer.current = setTimeout(() => typeReply(replyId, 0), replyThinkingMs);
 
-    const startedAt = Date.now();
     if (whatIf) {
-      setSimulatorLevers(whatIf.levers);
+      if (accessWhatIf) {
+        setSimulatorLevers(accessWhatIf.levers);
+        setScenario("Market Access");
+      } else if (marketingWhatIf) {
+        setMarketingLevers(marketingWhatIf.levers);
+        setScenario("Marketing");
+      }
       setActivePanel("What-If Simulator");
-      showPresetAnswer(replyId, preset.response, startedAt, false);
+      showPresetAnswer(replyId, preset.response, false);
       return;
     }
     if (assistantMode === "preset") {
-      showPresetAnswer(replyId, preset.response, startedAt, false);
+      showPresetAnswer(replyId, preset.response, false);
       return;
     }
     const request = new AbortController();
@@ -462,7 +543,7 @@ function LaunchTracker() {
     void streamLiveAnswer(replyId, history, request.signal).then((outcome) => {
       if (outcome === "answered" || request.signal.aborted) return;
       if (outcome === "unconfigured") setAssistantMode("preset");
-      showPresetAnswer(replyId, preset.response, startedAt, outcome === "failed");
+      showPresetAnswer(replyId, preset.response, outcome === "failed");
     });
   }
 
@@ -559,6 +640,7 @@ function LaunchTracker() {
                 onChange={(value) => setMonth(value as MonthName)}
               />
             )}
+            <span className="hidden h-8 w-px self-end bg-border sm:block" aria-hidden="true" />
             <ProfileSwitcher activeId={profile.id} onSwitch={switchProfile} />
           </div>
         </header>
@@ -630,7 +712,7 @@ function LaunchTracker() {
       {chatOpen ? (
         <aside
           ref={chatPaneRef}
-          aria-label="Dashboard Assistant"
+          aria-label="Clara, launch assistant"
           style={{
             width: docked
               ? dockedPaneWidth
@@ -661,7 +743,7 @@ function LaunchTracker() {
                 <Bot size={19} />
               </div>
               <div>
-                <p className="text-sm font-bold text-primary">Dashboard Assistant</p>
+                <p className="text-sm font-bold text-primary">Clara</p>
                 <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                   <span className="size-1.5 rounded-full bg-series-2" />
                   Ready to help
@@ -695,9 +777,7 @@ function LaunchTracker() {
 
           <Conversation className="chat-transcript min-h-0 flex-1">
             <ConversationContent className="gap-5 px-4 py-4">
-              <AssistantMessage
-                text={"Hi! I'm your Dashboard Assistant. What would you like to know?"}
-              />
+              <AssistantMessage text={"Hi! I'm Clara. What would you like to know?"} />
               {messages.map((message) => {
                 const revealing = reply?.id === message.id ? reply : null;
                 return (
@@ -781,26 +861,22 @@ function LaunchTracker() {
             <PromptInput onSubmit={handlePromptSubmit}>
               <PromptInputTextarea
                 ref={textareaRef}
-                aria-label="Ask the dashboard assistant"
-                placeholder="Ask about this dashboard…"
+                aria-label="Ask Clara"
+                placeholder="Ask Clara about this dashboard…"
                 className="min-h-11 px-3 py-3 text-sm"
               />
-              <PromptInputFooter className="justify-between border-t border-border px-2 py-1.5">
-                <span className="text-[10px] text-muted-foreground">
-                  {assistantMode === "preset"
-                    ? "Preset answers · based on dashboard data"
-                    : "Answers from Claude · based on dashboard data"}
-                </span>
+              {/* The send button sits beside the text and stays at the bottom as it grows. */}
+              <InputGroupAddon align="inline-end" className="self-end pb-1.5">
                 <PromptInputSubmit className="size-8 rounded-md" aria-label="Send message">
                   <Send size={15} />
                 </PromptInputSubmit>
-              </PromptInputFooter>
+              </InputGroupAddon>
             </PromptInput>
           </div>
         </aside>
       ) : docked ? (
         <aside
-          aria-label="Dashboard Assistant (collapsed)"
+          aria-label="Clara (collapsed)"
           style={{ width: collapsedRailWidth }}
           className="fixed bottom-[64px] right-0 top-0 z-30 flex flex-col items-center gap-3 border-l border-border bg-card pt-4"
         >
@@ -808,8 +884,8 @@ function LaunchTracker() {
             type="button"
             size="icon"
             onClick={openChat}
-            aria-label="Expand Dashboard Assistant"
-            title="Expand Dashboard Assistant"
+            aria-label="Expand Clara"
+            title="Expand Clara"
           >
             <PanelRightOpen size={18} />
           </Button>
@@ -818,19 +894,19 @@ function LaunchTracker() {
             onClick={openChat}
             className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground [writing-mode:vertical-rl] hover:text-primary"
           >
-            Dashboard Assistant
+            Ask Clara
           </button>
         </aside>
       ) : (
         <Button
           type="button"
           onClick={openChat}
-          aria-label="Open Dashboard Assistant"
-          title="Open Dashboard Assistant"
+          aria-label="Open Clara"
+          title="Open Clara"
           className="chat-launcher fixed bottom-20 z-30 size-12 rounded-full shadow-lg"
         >
           <MessageCircle size={21} />
-          <span className="sr-only">Dashboard Assistant</span>
+          <span className="sr-only">Clara</span>
         </Button>
       )}
     </main>
@@ -853,10 +929,10 @@ function ProfileSwitcher({
         <button
           type="button"
           aria-label={`Signed in as ${active.name}. Switch profile`}
-          className="-mb-1 flex items-center gap-2.5 rounded-md py-1 pl-1 pr-2 text-left transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:border-l sm:border-border sm:pl-3"
+          className="-mb-1 flex items-center gap-2.5 rounded-lg border border-border bg-linear-to-b from-card to-secondary/70 py-1 pl-1 pr-2.5 text-left shadow-[inset_0_1px_0_rgb(255_255_255/0.8),0_1px_2px_rgb(15_23_42/0.08)] transition-colors hover:border-primary/30 hover:to-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span
-            className="grid size-8 place-items-center rounded-full bg-secondary text-lg"
+            className="grid size-8 place-items-center rounded-full bg-card text-lg ring-1 ring-border"
             aria-hidden="true"
           >
             {active.avatar}
@@ -949,7 +1025,7 @@ function ReplyDownload({ text, title }: { text: string; title: string }) {
 
 function TypingDots() {
   return (
-    <div className="typing-dots" role="status" aria-label="Assistant is typing">
+    <div className="typing-dots" role="status" aria-label="Clara is typing">
       <span />
       <span />
       <span />

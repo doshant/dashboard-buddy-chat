@@ -8,7 +8,7 @@ export type Geography = "Nation" | RegionName;
 export const timePeriods = ["Launch to Date", "QTD", "Monthly"] as const;
 export type TimePeriod = (typeof timePeriods)[number];
 
-// Months with data (launch month M1 is January 2026); the Monthly period picks one of them.
+// Months with data (Jan–Sep 2026; launch was in January); the Monthly period picks one of them.
 export const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"] as const;
 export type MonthName = (typeof monthNames)[number];
 const fullMonthNames: Record<MonthName, string> = {

@@ -16,7 +16,9 @@ export function tablesFromMarkdown(markdown: string): ReplyTable[] {
   const tables: ReplyTable[] = [];
   let block: string[][] = [];
   const flush = () => {
-    const [headers, ...rest] = block.filter((row) => !row.every((cell) => separatorCell.test(cell)));
+    const [headers, ...rest] = block.filter(
+      (row) => !row.every((cell) => separatorCell.test(cell)),
+    );
     if (headers && rest.length) tables.push({ headers, rows: rest });
     block = [];
   };
@@ -35,7 +37,9 @@ function csvCell(value: string) {
 // Several tables share one CSV, separated by a blank line.
 export function tablesToCsv(tables: ReplyTable[]) {
   return tables
-    .map(({ headers, rows }) => [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n"))
+    .map(({ headers, rows }) =>
+      [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n"),
+    )
     .join("\r\n\r\n");
 }
 
@@ -48,7 +52,10 @@ export function excelValue(cell: string) {
 export function sheetNames(tables: ReplyTable[]) {
   const used = new Set<string>();
   return tables.map(({ headers }, index) => {
-    const base = (headers[0] || `Table ${index + 1}`).replace(/[[\]:*?/\\]/g, "-").slice(0, 28).trim();
+    const base = (headers[0] || `Table ${index + 1}`)
+      .replace(/[[\]:*?/\\]/g, "-")
+      .slice(0, 28)
+      .trim();
     let name = base;
     for (let n = 2; used.has(name.toLowerCase()); n++) name = `${base} ${n}`;
     used.add(name.toLowerCase());
@@ -64,14 +71,17 @@ export function exportFileName(title: string) {
     .trim()
     .slice(0, 80)
     .trim();
-  return name || "Dashboard Assistant";
+  return name || "Clara";
 }
 
 export function downloadCsv(tables: ReplyTable[], fileName: string) {
   // The byte-order mark makes Excel read the file as UTF-8 (for characters like "–").
   const blob = new Blob(["﻿", tablesToCsv(tables)], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
-  const link = Object.assign(document.createElement("a"), { href: url, download: `${fileName}.csv` });
+  const link = Object.assign(document.createElement("a"), {
+    href: url,
+    download: `${fileName}.csv`,
+  });
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -83,7 +93,10 @@ export async function downloadXlsx(tables: ReplyTable[], fileName: string) {
     sheet: names[index]!,
     stickyRowsCount: 1,
     columns: headers.map((_, column) => ({
-      width: Math.min(48, Math.max(10, ...[headers, ...rows].map((row) => (row[column] ?? "").length + 2))),
+      width: Math.min(
+        48,
+        Math.max(10, ...[headers, ...rows].map((row) => (row[column] ?? "").length + 2)),
+      ),
     })),
     data: [
       headers.map((value) => ({ value, fontWeight: "bold" as const })),

@@ -2,7 +2,7 @@ import { buildExecutiveData } from "@/lib/executive-data";
 import { buildFieldData, withFieldRates } from "@/lib/field-data";
 import { buildLaunchData, sum } from "@/lib/launch-data";
 import { buildMarketAccessData } from "@/lib/market-access-data";
-import { buildMarketingData, withRates } from "@/lib/marketing-data";
+import { buildMarketingData, sumRegionCounts, withRates } from "@/lib/marketing-data";
 import { nationalRaw, regionalRaw, type DashboardRaw } from "@/lib/regional-data";
 import { periodLabel, periodWindow, regionNames, type Geography, type Scope } from "@/lib/scope";
 
@@ -62,16 +62,7 @@ function regionalTables(periodScope: PeriodScope) {
     prescribers: sum(fieldRows.map((row) => row.prescribers)),
   });
   const marketingRows = builds.map(({ region, data }) => data.marketing.summaryRow(region));
-  const marketingTotal = withRates("Total", {
-    impressionsK: sum(marketingRows.map((row) => row.impressionsK)),
-    clicks: sum(marketingRows.map((row) => row.clicks)),
-    videoViews: sum(marketingRows.map((row) => row.videoViews)),
-    visits: sum(marketingRows.map((row) => row.visits)),
-    hvas: sum(marketingRows.map((row) => row.hvas)),
-    delivered: sum(marketingRows.map((row) => row.delivered)),
-    opens: sum(marketingRows.map((row) => row.opens)),
-    emailClicks: sum(marketingRows.map((row) => row.emailClicks)),
-  });
+  const marketingTotal = withRates("Total", sumRegionCounts(marketingRows));
   return {
     field: { rows: fieldRows, total: fieldTotal },
     marketing: { rows: marketingRows, total: marketingTotal },

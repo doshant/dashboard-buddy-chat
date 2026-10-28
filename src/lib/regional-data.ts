@@ -396,13 +396,15 @@ function splitMarketing() {
     );
   };
 
-  const channelKeys = ["display", "video", "social", "search", "other"] as const;
-  const impressions = splitParts(
-    channelKeys.map((key) => column(raw.impressions, key)),
-    weight("impressionsK"),
-  );
-  const clicks = splitFlow(column(raw.engagement, "clicks"), weight("clicks"));
-  const videoViews = splitFlow(column(raw.engagement, "videoViews"), weight("videoViews"));
+  const social = {
+    impressionsK: splitFlow(column(raw.social, "impressionsK"), weight("socialImpressionsK")),
+    engagements: splitFlow(column(raw.social, "engagements"), weight("socialEngagements")),
+    clicks: splitFlow(column(raw.social, "clicks"), weight("socialClicks")),
+  };
+  const search = {
+    impressionsK: splitFlow(column(raw.search, "impressionsK"), weight("searchImpressionsK")),
+    clicks: splitFlow(column(raw.search, "clicks"), weight("searchClicks")),
+  };
   const visits = splitParts(
     [column(raw.website, "hcp"), column(raw.website, "patient")],
     weight("visits"),
@@ -412,42 +414,25 @@ function splitMarketing() {
     hvaKeys.map((key) => column(raw.highValueActions, key)),
     weight("hvas"),
   );
-  const emailSplit = (
-    measure: "sent" | "bounced" | "opened" | "clicked" | "converted",
-    w: number[],
-  ) =>
-    splitParts(
-      [raw.email.map((row) => row.hcp[measure]), raw.email.map((row) => row.patient[measure])],
-      w,
-    );
   const email = {
-    sent: emailSplit("sent", weight("delivered")),
-    bounced: emailSplit("bounced", weight("delivered")),
-    opened: emailSplit("opened", weight("opens")),
-    clicked: emailSplit("clicked", weight("emailClicks")),
-    converted: emailSplit("converted", weight("emailClicks")),
+    sent: splitFlow(column(raw.email, "sent"), weight("sent")),
+    bounced: splitFlow(column(raw.email, "bounced"), weight("sent")),
+    opened: splitFlow(column(raw.email, "opened"), weight("opens")),
+    clicked: splitFlow(column(raw.email, "clicked"), weight("emailClicks")),
+    converted: splitFlow(column(raw.email, "converted"), weight("emailClicks")),
   };
-  const emailFor = (m: number, r: number, a: number) => ({
-    sent: at(email.sent[m]?.[a], r),
-    bounced: at(email.bounced[m]?.[a], r),
-    opened: at(email.opened[m]?.[a], r),
-    clicked: at(email.clicked[m]?.[a], r),
-    converted: at(email.converted[m]?.[a], r),
-  });
 
   return byRegion<MarketingRaw>((r) => ({
-    impressions: raw.impressions.map((row, m) => ({
+    social: raw.social.map((row, m) => ({
       month: row.month,
-      calendar: row.calendar,
-      display: at(impressions[m]?.[0], r),
-      video: at(impressions[m]?.[1], r),
-      social: at(impressions[m]?.[2], r),
-      search: at(impressions[m]?.[3], r),
-      other: at(impressions[m]?.[4], r),
+      impressionsK: at(social.impressionsK[r], m),
+      engagements: at(social.engagements[r], m),
+      clicks: at(social.clicks[r], m),
     })),
-    engagement: raw.engagement.map((_, m) => ({
-      clicks: at(clicks[r], m),
-      videoViews: at(videoViews[r], m),
+    search: raw.search.map((row, m) => ({
+      impressionsK: at(search.impressionsK[r], m),
+      clicks: at(search.clicks[r], m),
+      cpc: row.cpc,
     })),
     website: raw.website.map((_, m) => ({
       hcp: at(visits[m]?.[0], r),
@@ -458,7 +443,13 @@ function splitMarketing() {
       repRequest: at(hvas[m]?.[1], r),
       signUp: at(hvas[m]?.[2], r),
     })),
-    email: raw.email.map((_, m) => ({ hcp: emailFor(m, r, 0), patient: emailFor(m, r, 1) })),
+    email: raw.email.map((_, m) => ({
+      sent: at(email.sent[r], m),
+      bounced: at(email.bounced[r], m),
+      opened: at(email.opened[r], m),
+      clicked: at(email.clicked[r], m),
+      converted: at(email.converted[r], m),
+    })),
   }));
 }
 

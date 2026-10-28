@@ -9,7 +9,16 @@ import { monthNames, regionNames, timePeriods } from "@/lib/scope";
 // the user may see, and streams Claude's answer back as plain text. The API key never leaves the
 // server. Callers pass the client in, so tests can use a fake one.
 
-export const assistantModel = "claude-opus-5-5";
+// Claude Opus 5.5 by default. ASSISTANT_MODEL=claude-sonnet-5-5 answers in a few seconds rather
+// than about twenty: Sonnet 5.5 runs with thinking off, which these data look-ups don't need.
+export const defaultAssistantModel = "claude-opus-5-5";
+const fastAssistantModel = "claude-sonnet-5-5";
+
+export function assistantModel() {
+  return process.env["ASSISTANT_MODEL"] === fastAssistantModel
+    ? fastAssistantModel
+    : defaultAssistantModel;
+}
 
 const requestSchema = z.object({
   profileId: z.string(),
@@ -31,6 +40,9 @@ const requestSchema = z.object({
 
 export type ChatRequest = z.infer<typeof requestSchema>;
 
+// A warm-up names the profile and scope the next question will use, without a question.
+const warmUpSchema = requestSchema.omit({ messages: true }).extend({ warmUp: z.literal(true) });
+
 // The request body `client.beta.messages.stream()` accepts.
 export type StreamParams = Parameters<Anthropic["beta"]["messages"]["stream"]>[0];
 
@@ -45,6 +57,8 @@ export type AssistantClient = {
       stream(body: StreamParams, options?: { signal?: AbortSignal }): ReplyStream;
     };
   };
+  // Optional: get ready for a request like this one, so the next answer starts sooner.
+  warmUp?(body: StreamParams): void;
 };
 
 const json = (status: number, body: Record<string, unknown>) =>
@@ -57,10 +71,13 @@ export function buildClaudeRequest(chat: ChatRequest): StreamParams {
   const profile = profiles.find((item) => item.id === chat.profileId)!;
   const { month, ...rest } = chat.scope;
   const context = buildAssistantContext(month ? { ...rest, month } : rest, profile.panels);
+  const model = assistantModel();
   return {
-    model: assistantModel,
+    model,
     max_tokens: 64000,
-    output_config: { effort: "medium" },
+    ...(model === fastAssistantModel
+      ? { thinking: { type: "between_tools" as const }, output_config: { effort: "low" as const } }
+      : { output_config: { effort: "medium" as const } }),
     // If a safety classifier declines, the API re-runs the request on a suitable model.
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
@@ -83,7 +100,17 @@ export async function handleChatRequest(
 ): Promise<Response> {
   let chat: ChatRequest;
   try {
-    chat = requestSchema.parse(await request.json());
+    const body: unknown = await request.json();
+    const warmUp = warmUpSchema.safeParse(body);
+    if (warmUp.success) {
+      if (!profiles.some((item) => item.id === warmUp.data.profileId)) {
+        return json(400, { error: "unknown_profile" });
+      }
+      const { warmUp: _warmUp, ...rest } = warmUp.data;
+      (await getClient())?.warmUp?.(buildClaudeRequest({ ...rest, messages: [] }));
+      return new Response(null, { status: 204 });
+    }
+    chat = requestSchema.parse(body);
   } catch {
     return json(400, { error: "invalid_request" });
   }

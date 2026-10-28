@@ -9,10 +9,17 @@ import {
   buildMarketingData,
   formatCount,
   formatRate,
+  formatSpend,
   nationalMarketingRaw,
   type MarketingData,
 } from "@/lib/marketing-data";
-import { periodLabel, periodWindow, type PeriodLabel, type PeriodWindow } from "@/lib/scope";
+import {
+  monthNames,
+  periodLabel,
+  periodWindow,
+  type PeriodLabel,
+  type PeriodWindow,
+} from "@/lib/scope";
 import { shapeTrend, type TrendView } from "@/lib/trend";
 
 // The Executive Summary only re-presents figures owned by the other tabs, plus monthly referrals
@@ -112,7 +119,7 @@ export function buildExecutiveData(input: ExecutiveInput) {
   // First-pass PA approval fell in Q3; both Executive cards that mention PA show the drop.
   const firstPassTrend = `${marketAccess.paAnalysis.firstPassH1}% H1 → ${marketAccess.paAnalysis.firstPassQ3}% Q3`;
   const fillAndAbandonByMonth = referredToDate.map((referred, i) => ({
-    month: newPatients[i]?.month ?? `M${i + 1}`,
+    month: newPatients[i]?.month ?? monthNames[i] ?? "",
     referred,
     fillPct: share1(startedToDate[i] ?? 0, referred),
     abandonPct: share1(cancelledToDate[i] ?? 0, referred),
@@ -232,7 +239,7 @@ export function buildExecutiveData(input: ExecutiveInput) {
           {
             label: "Total calls",
             value: fieldKpis.calls.toLocaleString("en-US"),
-            badge: { text: `${fieldKpis.latestCalls} in M9`, tone: "good" },
+            badge: { text: `${fieldKpis.latestCalls} in Sep`, tone: "good" },
           },
           { label: "Face-to-face rate", value: `${fieldKpis.faceToFacePct}%` },
           { label: "Avg calls per HCP", value: fieldKpis.callsPerHcp.toFixed(1) },
@@ -539,10 +546,13 @@ export function buildExecutiveData(input: ExecutiveInput) {
         {
           label: "Website visits",
           value: formatCount(marketingKpis.website.total),
-          badge: { text: `+${marketingKpis.website.growthSinceLaunchPct}% since M1`, tone: "good" },
+          badge:
+            marketingKpis.website.growthVsPriorPct < 0
+              ? { text: `${marketingKpis.website.growthVsPriorPct}% vs prior month`, tone: "watch" }
+              : { text: `+${marketingKpis.website.growthSinceLaunchPct}% since Jan`, tone: "good" },
         },
         {
-          label: "Email open rate",
+          label: "HCP email open rate",
           value: formatRate(marketingKpis.email.openRate),
           badge: {
             text: `Click rate ${formatRate(marketingKpis.email.clickRate)}`,
@@ -550,10 +560,10 @@ export function buildExecutiveData(input: ExecutiveInput) {
           },
         },
         {
-          label: "Ad engagement rate",
-          value: formatRate(marketingKpis.engagement.rate),
+          label: "Marketing spend",
+          value: formatSpend(marketingKpis.spend.total),
           badge: {
-            text: `${formatCount(marketingKpis.impressions.total)} impressions`,
+            text: `${formatCount(marketingKpis.paidMedia.impressions)} paid impressions`,
             tone: "neutral",
           },
         },

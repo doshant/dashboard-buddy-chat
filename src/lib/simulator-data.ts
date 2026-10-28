@@ -81,6 +81,54 @@ export function withPaDays(levers: SimulatorLevers, paDays: number, maxFirstDose
   return { ...levers, paDays, firstDoseDays };
 }
 
+// Paid vials per projected month: the current trajectory, and with `paidStartsPerMonth` new paid
+// patients a month who start `daysSaved` days sooner. Both simulator scenarios project this way.
+export function projectPaidVials(
+  baseline: SimulatorBaseline,
+  paidStartsPerMonth: number,
+  daysSaved = 0,
+) {
+  const extraStartsPerMonth = paidStartsPerMonth - baseline.paidStartsPerMonth;
+  const currentVials = projectAhead(baseline.paidVials, simulatorMonths.length);
+  const months = simulatorMonths.map((month, i) => {
+    const current = Math.max(0, currentVials[i] ?? 0);
+    // New starters arrive through the month, so on average they are on therapy half of it.
+    // Starting sooner adds patient-months on therapy: each month's starters dose earlier.
+    const extraPatients = extraStartsPerMonth * (i + 0.5) + (paidStartsPerMonth * daysSaved) / 30;
+    const simulated = Math.max(0, current + extraPatients * baseline.dosesPerPatientMonth);
+    return { month, currentVials: current, simulatedVials: simulated };
+  });
+  const deltaNetSalesM =
+    sum(months.map((row) => row.simulatedVials - row.currentVials)) * netPerVialM;
+  return { months, deltaNetSalesM, extraStartsPerMonth };
+}
+
+// Net sales a month for the chart (actual Jul–Sep, then projected) and the six-month totals.
+export function salesProjection(
+  baseline: SimulatorBaseline,
+  { months, deltaNetSalesM, extraStartsPerMonth }: ReturnType<typeof projectPaidVials>,
+) {
+  return {
+    chart: [
+      ...baseline.actual.map((row) => ({
+        month: row.month,
+        current: round2(row.netSalesM),
+        simulated: round2(row.netSalesM),
+      })),
+      ...months.map((row) => ({
+        month: row.month,
+        current: round2(row.currentVials * netPerVialM),
+        simulated: round2(row.simulatedVials * netPerVialM),
+      })),
+    ],
+    currentNetSalesM: round1(sum(months.map((row) => row.currentVials)) * netPerVialM),
+    simulatedNetSalesM: round1(sum(months.map((row) => row.simulatedVials)) * netPerVialM),
+    deltaNetSalesM: round1(deltaNetSalesM),
+    incrementalPatients: Math.round(extraStartsPerMonth * simulatorMonths.length),
+    baselinePaidStartsPerMonth: round1(baseline.paidStartsPerMonth),
+  };
+}
+
 // Paid vials per projected month under the current trajectory and under the given levers.
 function project(baseline: SimulatorBaseline, levers: SimulatorLevers) {
   const base = baseline.levers;
@@ -92,25 +140,9 @@ function project(baseline: SimulatorBaseline, levers: SimulatorLevers) {
     : 1;
 
   const paidStartsPerMonth = baseline.paidStartsPerMonth * conversionFactor * oopFactor * paFactor;
-  const extraStartsPerMonth = paidStartsPerMonth - baseline.paidStartsPerMonth;
-  // Starting sooner adds patient-months on therapy: each month's starters dose earlier.
-  const daysSaved = base.firstDoseDays - levers.firstDoseDays;
-
-  const currentVials = projectAhead(baseline.paidVials, simulatorMonths.length);
-  const months = simulatorMonths.map((month, i) => {
-    const current = Math.max(0, currentVials[i] ?? 0);
-    // New starters arrive through the month, so on average they are on therapy half of it.
-    const extraPatients = extraStartsPerMonth * (i + 0.5) + (paidStartsPerMonth * daysSaved) / 30;
-    const simulated = Math.max(0, current + extraPatients * baseline.dosesPerPatientMonth);
-    return { month, currentVials: current, simulatedVials: simulated };
-  });
-  const deltaNetSalesM =
-    sum(months.map((row) => row.simulatedVials - row.currentVials)) * netPerVialM;
   return {
-    months,
-    deltaNetSalesM,
+    ...projectPaidVials(baseline, paidStartsPerMonth, base.firstDoseDays - levers.firstDoseDays),
     paidStartsPerMonth,
-    extraStartsPerMonth,
     effectiveReferralToPaidPct: levers.referralToPaidPct * oopFactor * paFactor,
   };
 }
@@ -127,24 +159,8 @@ export function simulate(baseline: SimulatorBaseline, levers: SimulatorLevers) {
   const copayDeltaM = project(baseline, { ...base, oopPerDose: levers.oopPerDose }).deltaNetSalesM;
 
   return {
-    chart: [
-      ...baseline.actual.map((row) => ({
-        month: row.month,
-        current: round2(row.netSalesM),
-        simulated: round2(row.netSalesM),
-      })),
-      ...months.map((row) => ({
-        month: row.month,
-        current: round2(row.currentVials * netPerVialM),
-        simulated: round2(row.simulatedVials * netPerVialM),
-      })),
-    ],
-    currentNetSalesM: round1(sum(months.map((row) => row.currentVials)) * netPerVialM),
-    simulatedNetSalesM: round1(sum(months.map((row) => row.simulatedVials)) * netPerVialM),
-    deltaNetSalesM: round1(result.deltaNetSalesM),
-    incrementalPatients: Math.round(result.extraStartsPerMonth * simulatorMonths.length),
+    ...salesProjection(baseline, result),
     paidStartsPerMonth: round1(result.paidStartsPerMonth),
-    baselinePaidStartsPerMonth: round1(baseline.paidStartsPerMonth),
     effectiveReferralToPaidPct: Math.min(100, Math.round(result.effectiveReferralToPaidPct)),
     copaySupportCost: Math.round(copaySupportCost),
     copayRoi: copaySupportCost > 0 ? round1((copayDeltaM * 1e6) / copaySupportCost) : null,
@@ -238,12 +254,12 @@ const leverPatterns: { key: LeverKey; pattern: RegExp }[] = [
   },
 ];
 
-const whatIfCue = /\bif\b|simulat|scenario|suppose|\bimpact\b|\beffect\b/;
-const downWords =
+export const whatIfCue = /\bif\b|simulat|scenario|suppose|\bimpact\b|\beffect\b/;
+export const downWords =
   /\b(cut|cuts|reduce[sd]?|lower(?:ed|s)?|drops?|decrease[sd]?|faster|sooner|shorter|less|fewer|down|falls?|shave|quicker)\b/;
-const upWords =
+export const upWords =
   /\b(increase[sd]?|raise[sd]?|rises?|higher|more|slower|longer|up|grows?|boost(?:ed|s)?)\b/;
-const improveWords = /\b(improve[sd]?|better|speed(?:s|ed)? up)\b/;
+export const improveWords = /\b(improve[sd]?|better|speed(?:s|ed)? up)\b/;
 
 const leverNames: Record<LeverKey, string> = {
   referralToPaidPct: "Referral → Paid",

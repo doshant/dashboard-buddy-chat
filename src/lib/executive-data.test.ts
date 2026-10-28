@@ -71,7 +71,7 @@ describe("Executive Summary", () => {
     const questions = starterQuestionsFor("Executive Summary");
     expect(questions).toHaveLength(5);
     for (const question of questions) {
-      expect(resolveDashboardAnswer(question).title).not.toBe("Dashboard Assistant");
+      expect(resolveDashboardAnswer(question).title).not.toBe("Clara");
     }
     expect(resolveDashboardAnswer("What is our fill rate?").response).toContain("86% of referrals");
     expect(resolveDashboardAnswer("What is our abandonment rate?").response).toContain(

@@ -36,13 +36,17 @@ describe("Launch reference data", () => {
       const status = activeByStatus[i];
       expect(status).toBeDefined();
       if (!status) return;
-      expect(row.loading + row.maintenance).toBe(status.commercial + status.quickStart + status.bridge + status.pap);
+      expect(row.loading + row.maintenance).toBe(
+        status.commercial + status.quickStart + status.bridge + status.pap,
+      );
     });
     expect(kpis.activePatients).toMatchObject({ total: 62, paid: 44, free: 18 });
   });
 
   it("reconciles referrals with first doses, pending and the funnel", () => {
-    expect(sum(newPatients.map((row) => row.eapTransition + row.newToBrand))).toBe(funnel.firstDose);
+    expect(sum(newPatients.map((row) => row.eapTransition + row.newToBrand))).toBe(
+      funnel.firstDose,
+    );
     expect(funnel.referred - funnel.firstDose).toBeGreaterThanOrEqual(kpis.pending.total);
   });
 
@@ -52,10 +56,18 @@ describe("Launch reference data", () => {
   });
 
   it("keeps the visible figures in the preset answers", () => {
-    expect(resolveDashboardAnswer("How are we tracking against forecast?").response).toContain("$24.5M");
-    expect(resolveDashboardAnswer("How many patients are active right now?").response).toContain("62 patients");
-    expect(resolveDashboardAnswer("Why are patients still pending?").response).toContain("9 patients");
-    expect(resolveDashboardAnswer("How many new prescribers did we add?").response).toContain("38 HCPs");
+    expect(resolveDashboardAnswer("How are we tracking against forecast?").response).toContain(
+      "$24.5M",
+    );
+    expect(resolveDashboardAnswer("How many patients are active right now?").response).toContain(
+      "62 patients",
+    );
+    expect(resolveDashboardAnswer("Why are patients still pending?").response).toContain(
+      "9 patients",
+    );
+    expect(resolveDashboardAnswer("How many new prescribers did we add?").response).toContain(
+      "38 HCPs",
+    );
   });
 
   it("offers a friendly fallback for messages outside the preset topics", () => {

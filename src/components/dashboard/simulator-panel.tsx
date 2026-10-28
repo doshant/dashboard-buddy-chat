@@ -1,7 +1,10 @@
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { RotateCcw } from "lucide-react";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
+  LabelList,
   Line,
   LineChart,
   ReferenceLine,
@@ -13,7 +16,22 @@ import {
 import { axisTick, tooltipProps } from "@/components/dashboard/chart-theme";
 import { ChartLegend, DashboardPanel } from "@/components/dashboard/primitives";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import {
+  marketingBaselineFor,
+  marketingLeverRanges,
+  marketingPresets,
+  simulateMarketing,
+  type MarketingBaseline,
+  type MarketingLevers,
+} from "@/lib/marketing-simulator-data";
 import {
   leverRanges,
   netPerVial,
@@ -39,77 +57,291 @@ const signed = (value: number, unit = "") =>
   `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(value)}${unit}`;
 const thousands = (value: number) =>
   value >= 1000 ? `$${(value / 1000).toFixed(1)}k` : `$${value}`;
+const round1 = (value: number) => Math.round(value * 10) / 10;
+const percent = (value: number) => `${value.toFixed(1)}%`;
+const impressions = (valueK: number) =>
+  valueK >= 1000 ? `${(valueK / 1000).toFixed(2)}M` : valueK ? `${valueK}k` : "0";
+const dollars = (value: number) =>
+  Math.abs(value) >= 1000
+    ? `$${(Math.abs(value) / 1000).toFixed(1)}k`
+    : `$${Math.abs(value).toFixed(0)}`;
+const signedDollars = (value: number) =>
+  `${value > 0 ? "+" : value < 0 ? "−" : ""}${dollars(value)}`;
+const changePct = (value: number, today: number) =>
+  today ? Math.round(((value - today) / today) * 100) : 0;
 
-// The levers live with the page, so a what-if question in the assistant can set them. null means
-// today's values for the selected geography.
+// Which levers the simulator shows. Each profile sees the scenarios for the tabs it can open.
+export const simulatorScenarios = ["Marketing", "Market Access"] as const;
+export type SimulatorScenario = (typeof simulatorScenarios)[number];
+
+// The scenario and levers live with the page, so they survive tab changes and a what-if question
+// in the assistant can set them. null levers mean today's values for the selected geography.
 export const SimulatorLeversContext = createContext<{
+  scenarios: readonly SimulatorScenario[];
+  scenario: SimulatorScenario;
+  setScenario: (scenario: SimulatorScenario) => void;
   levers: SimulatorLevers | null;
   setLevers: (levers: SimulatorLevers | null) => void;
-}>({ levers: null, setLevers: () => {} });
+  marketingLevers: MarketingLevers | null;
+  setMarketingLevers: (levers: MarketingLevers | null) => void;
+}>({
+  scenarios: ["Market Access"],
+  scenario: "Market Access",
+  setScenario: () => {},
+  levers: null,
+  setLevers: () => {},
+  marketingLevers: null,
+  setMarketingLevers: () => {},
+});
 
 export function SimulatorPanel() {
   const { scope } = useDashboardData();
+  const { scenario } = useContext(SimulatorLeversContext);
+  const where = scope.geography === "Nation" ? "National" : scope.geography;
   // The simulator always starts from launch-to-date figures for the selected geography.
-  const baseline = useMemo(() => simulatorBaselineFor(scope.geography), [scope.geography]);
-  return <Simulator baseline={baseline} geography={scope.geography} />;
+  const accessBaseline = useMemo(() => simulatorBaselineFor(scope.geography), [scope.geography]);
+  const marketingBaseline = useMemo(() => marketingBaselineFor(scope.geography), [scope.geography]);
+  return scenario === "Marketing" ? (
+    <MarketingSimulator baseline={marketingBaseline} where={where} />
+  ) : (
+    <AccessSimulator baseline={accessBaseline} where={where} />
+  );
 }
 
-function Simulator({ baseline, geography }: { baseline: SimulatorBaseline; geography: string }) {
+function MarketingSimulator({ baseline, where }: { baseline: MarketingBaseline; where: string }) {
   const base = baseline.levers;
-  const ranges = leverRanges(baseline);
-  const shared = useContext(SimulatorLeversContext);
-  const levers = shared.levers ?? base;
-  const setLevers = shared.setLevers;
-  const result = simulate(baseline, levers);
-  const changed = (Object.keys(base) as (keyof SimulatorLevers)[]).some(
-    (key) => levers[key] !== base[key],
-  );
-
-  const presets = simulatorPresets(baseline);
-
-  const oopChangePct = base.oopPerDose
-    ? Math.round(((levers.oopPerDose - base.oopPerDose) / base.oopPerDose) * 100)
-    : 0;
-  const where = geography === "Nation" ? "National" : geography;
+  const ranges = marketingLeverRanges(baseline);
+  const { marketingLevers, setMarketingLevers } = useContext(SimulatorLeversContext);
+  const levers = marketingLevers ?? base;
+  const result = simulateMarketing(baseline, levers);
+  const set = (change: Partial<MarketingLevers>) => setMarketingLevers({ ...levers, ...change });
+  const month = baseline.month;
 
   return (
-    // Assumptions (a third of the width, at least 220px) and the chart stay side by side, filling the height
-    // between the header and the tab bar. Only phone widths stack them.
-    <section
-      aria-label="What-if simulator"
-      className="grid grid-cols-1 gap-4 sm:min-h-[calc(100dvh-11.5rem)] sm:grid-cols-[minmax(220px,1fr)_minmax(0,2fr)]"
-    >
-      <DashboardPanel
-        title="Assumptions"
-        subtitle={`${where} launch-to-date figures are the starting point`}
-        className="flex min-w-0 flex-col"
-        action={
-          <button
-            type="button"
-            onClick={() => setLevers(null)}
-            disabled={!changed}
-            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-secondary disabled:pointer-events-none disabled:opacity-40"
-          >
-            <RotateCcw size={12} aria-hidden="true" />
-            Reset
-          </button>
-        }
-      >
-        <div className="mb-4 flex flex-wrap gap-1.5">
-          {presets.map((preset) => (
-            <button
-              key={preset.label}
-              type="button"
-              onClick={() => setLevers(preset.levers)}
-              className="rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground transition-colors hover:bg-primary hover:text-primary-foreground"
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
+    <SimulatorLayout
+      where={where}
+      subtitle={`${where} figures for ${month} are the starting point`}
+      changed={(Object.keys(base) as (keyof MarketingLevers)[]).some(
+        (key) => levers[key] !== base[key],
+      )}
+      onReset={() => setMarketingLevers(null)}
+      presets={marketingPresets(baseline)}
+      onPreset={setMarketingLevers}
+      levers={
+        <>
+          <Lever
+            label="Social Media Impressions a Month"
+            value={levers.socialImpressionsK}
+            display={impressions(levers.socialImpressionsK)}
+            delta={changePct(levers.socialImpressionsK, base.socialImpressionsK)}
+            unit="%"
+            baseline={`${impressions(base.socialImpressionsK)} in ${month}`}
+            rule="Costs $25.00 per 1,000 impressions; about 0.7% click through to the site"
+            range={ranges.socialImpressionsK}
+            formatBound={impressions}
+            step={10}
+            onChange={(value) => set({ socialImpressionsK: value })}
+          />
+          <Lever
+            label="Paid Search Clicks a Month"
+            value={levers.searchClicks}
+            display={levers.searchClicks.toLocaleString("en-US")}
+            delta={changePct(levers.searchClicks, base.searchClicks)}
+            unit="%"
+            baseline={`${base.searchClicks.toLocaleString("en-US")} in ${month}, ${baseline.searchPeak.clicks.toLocaleString("en-US")} at the ${baseline.searchPeak.month} peak`}
+            rule={`Costs $${baseline.searchCpc.toFixed(2)} per click (${month}'s rate); each click is a site visit`}
+            range={ranges.searchClicks}
+            formatBound={(value) => value.toLocaleString("en-US")}
+            step={10}
+            onChange={(value) => set({ searchClicks: value })}
+          />
+          <Lever
+            label="HCP Email Open Rate"
+            value={levers.emailOpenRatePct}
+            display={percent(levers.emailOpenRatePct)}
+            delta={round1(levers.emailOpenRatePct - base.emailOpenRatePct)}
+            unit="%"
+            baseline={`${percent(base.emailOpenRatePct)} of ${baseline.emailDelivered.toLocaleString("en-US")} delivered HCP emails are opened`}
+            rule="Email is paid per send, so the rate changes results, not spend"
+            range={ranges.emailOpenRatePct}
+            formatBound={(value) => `${value}%`}
+            step={0.5}
+            onChange={(value) => set({ emailOpenRatePct: round1(value) })}
+          />
+          <Lever
+            label="HCP Email Click Rate"
+            value={levers.emailClickRatePct}
+            display={percent(levers.emailClickRatePct)}
+            delta={round1(levers.emailClickRatePct - base.emailClickRatePct)}
+            unit="%"
+            baseline={`${percent(base.emailClickRatePct)} of delivered HCP emails are clicked`}
+            rule="Each click is a site visit; capped at the open rate. Spend is unchanged"
+            range={ranges.emailClickRatePct}
+            formatBound={(value) => `${value}%`}
+            step={0.1}
+            onChange={(value) => set({ emailClickRatePct: round1(value) })}
+          />
+        </>
+      }
+      chartTitle="Monthly Marketing Spend: Today vs Scenario"
+      chartSubtitle={`${where} · spend a month by channel, priced at ${month}'s rates`}
+      chart={<SpendComparison result={result} />}
+      tiles={
+        <>
+          <ResultTile
+            label="Monthly Spend"
+            value={dollars(result.spend)}
+            detail={`${dollars(result.spendToday)} today`}
+            tone={0}
+          />
+          <ResultTile
+            label="Change a Month"
+            value={signedDollars(result.deltaSpend)}
+            detail={`${result.deltaSpendPct > 0 ? "+" : ""}${result.deltaSpendPct}% vs today`}
+            tone={-result.deltaSpend}
+          />
+          <ResultTile
+            label="Change over 6 Months"
+            value={signedDollars(result.deltaSpendSixMonths)}
+            detail={`${simulatorMonths[0]}–${simulatorMonths[simulatorMonths.length - 1]}`}
+            tone={-result.deltaSpendSixMonths}
+          />
+          <ResultTile
+            label="Cost per Site Visit"
+            value={`$${result.costPerVisit.toFixed(2)}`}
+            detail={`$${result.costPerVisitToday.toFixed(2)} today · ${result.visits.toLocaleString("en-US")} visits a month`}
+            tone={result.costPerVisitToday - result.costPerVisit}
+          />
+        </>
+      }
+      note="Spend follows how each channel is bought: social per 1,000 impressions, search per click and HCP email per send."
+    />
+  );
+}
 
-        {/* Four equal rows, so the levers share the pane height evenly. */}
-        <div className="grid flex-1 auto-rows-fr gap-3">
+// Today's and the scenario's monthly spend as two stacked columns, with the channel detail below.
+const spendSeries = [
+  { key: "email", label: "HCP email", color: "var(--series-1)", swatch: "bg-series-1" },
+  { key: "social", label: "Social media", color: "var(--series-2)", swatch: "bg-series-2" },
+  { key: "search", label: "Paid search", color: "var(--series-3)", swatch: "bg-series-3" },
+] as const;
+
+function SpendComparison({ result }: { result: ReturnType<typeof simulateMarketing> }) {
+  const column = (label: string, pick: (row: (typeof result.channels)[number]) => number) => ({
+    label,
+    ...Object.fromEntries(result.channels.map((row) => [row.key, pick(row)])),
+    total: result.channels.reduce((sum, row) => sum + pick(row), 0),
+  });
+  const data = [column("Today", (row) => row.spendToday), column("Scenario", (row) => row.spend)];
+  return (
+    <div className="flex flex-1 flex-col">
+      <ChartLegend
+        textSize="text-[13px]"
+        items={spendSeries.map((item) => ({ label: item.label, className: item.swatch }))}
+      />
+      <div className="min-h-56 flex-1">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 24, right: 20, bottom: 4, left: 0 }} barSize={96}>
+            <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 4" />
+            <XAxis dataKey="label" tick={chartTick} tickLine={false} axisLine={false} />
+            <YAxis
+              tick={chartTick}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(value: number) => (value ? `$${value / 1000}k` : "$0")}
+            />
+            <Tooltip
+              {...chartTooltip}
+              cursor={{ fill: "var(--color-muted)", opacity: 0.4 }}
+              formatter={(value) => dollars(Number(value))}
+            />
+            {spendSeries.map((item, i) => (
+              <Bar
+                key={item.key}
+                dataKey={item.key}
+                name={item.label}
+                stackId="spend"
+                fill={item.color}
+                isAnimationActive={false}
+              >
+                {i === spendSeries.length - 1 && (
+                  <LabelList
+                    dataKey="total"
+                    position="top"
+                    formatter={(value: unknown) => dollars(Number(value))}
+                    style={{ ...chartTick, fontWeight: 700, fill: "var(--color-foreground)" }}
+                  />
+                )}
+              </Bar>
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <table className="mt-2 w-full text-xs tabular-nums">
+        <thead>
+          <tr className="border-b border-border text-[10px] uppercase text-muted-foreground">
+            <th scope="col" className="py-1.5 text-left font-semibold">
+              Channel
+            </th>
+            <th scope="col" className="py-1.5 text-center font-semibold">
+              Spend today
+            </th>
+            <th scope="col" className="py-1.5 text-center font-semibold">
+              Scenario
+            </th>
+            <th scope="col" className="py-1.5 text-center font-semibold">
+              Change
+            </th>
+            <th scope="col" className="py-1.5 text-center font-semibold">
+              Site visits
+            </th>
+            <th scope="col" className="py-1.5 text-center font-semibold">
+              Cost per visit
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {result.channels.map((row) => (
+            <tr key={row.key} className="border-b border-border/60">
+              <th scope="row" className="py-1.5 text-left font-semibold">
+                {row.label}
+              </th>
+              <td className="py-1.5 text-center">{dollars(row.spendToday)}</td>
+              <td className="py-1.5 text-center">{dollars(row.spend)}</td>
+              <td className="py-1.5 text-center">{signedDollars(row.spend - row.spendToday)}</td>
+              <td className="py-1.5 text-center">
+                {row.visitsToday.toLocaleString("en-US")} → {row.visits.toLocaleString("en-US")}
+              </td>
+              <td className="py-1.5 text-center">
+                {row.costPerVisitToday === null ? "–" : `$${row.costPerVisitToday.toFixed(2)}`} →{" "}
+                {row.costPerVisit === null ? "–" : `$${row.costPerVisit.toFixed(2)}`}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function AccessSimulator({ baseline, where }: { baseline: SimulatorBaseline; where: string }) {
+  const base = baseline.levers;
+  const ranges = leverRanges(baseline);
+  const { levers: chosen, setLevers } = useContext(SimulatorLeversContext);
+  const levers = chosen ?? base;
+  const result = simulate(baseline, levers);
+
+  return (
+    <SimulatorLayout
+      where={where}
+      changed={(Object.keys(base) as (keyof SimulatorLevers)[]).some(
+        (key) => levers[key] !== base[key],
+      )}
+      onReset={() => setLevers(null)}
+      presets={simulatorPresets(baseline)}
+      onPreset={setLevers}
+      levers={
+        <>
           <Lever
             label="Referral → Paid"
             value={levers.referralToPaidPct}
@@ -156,7 +388,7 @@ function Simulator({ baseline, geography }: { baseline: SimulatorBaseline; geogr
             label="Avg Out-of-Pocket per Dose"
             value={levers.oopPerDose}
             display={`$${levers.oopPerDose}`}
-            delta={oopChangePct}
+            delta={changePct(levers.oopPerDose, base.oopPerDose)}
             unit="%"
             baseline={`$${base.oopPerDose} patient cost per paid dose today`}
             rule={`Every 10% lower: +${simulatorRules.oopElasticity * 10}% new paid patients. The cut is paid as copay support.`}
@@ -164,78 +396,15 @@ function Simulator({ baseline, geography }: { baseline: SimulatorBaseline; geogr
             step={5}
             onChange={(value) => setLevers({ ...levers, oopPerDose: value })}
           />
-        </div>
-      </DashboardPanel>
-
-      <DashboardPanel
-        title="Projected Net Sales: Current vs Simulated"
-        subtitle={`${where} · $M a month · actual Jul–Sep, projected ${simulatorMonths[0]}–${simulatorMonths[simulatorMonths.length - 1]}`}
-        className="flex min-w-0 flex-col"
-      >
-        <ChartLegend
-          textSize="text-[13px]"
-          items={[
-            { label: "Current trajectory", className: "bg-target" },
-            { label: "Simulated", className: "bg-series-1" },
-          ]}
-        />
-        <div className="min-h-72 flex-1">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={result.chart} margin={{ top: 16, right: 20, bottom: 4, left: 0 }}>
-              <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 4" />
-              <XAxis dataKey="month" tick={chartTick} tickLine={false} axisLine={false} />
-              <YAxis
-                tick={chartTick}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(value: number) => `$${value}M`}
-                domain={[0, "auto"]}
-              />
-              <Tooltip
-                {...chartTooltip}
-                cursor={{ stroke: "var(--color-border)" }}
-                formatter={(value) => `$${Number(value).toFixed(2)}M`}
-              />
-              <ReferenceLine
-                x="Sep"
-                stroke="var(--color-muted-foreground)"
-                strokeDasharray="2 3"
-                label={{ value: "Projected →", position: "insideTopRight", ...chartTick }}
-              />
-              <Line
-                dataKey="current"
-                name="Current trajectory"
-                stroke="var(--target)"
-                strokeWidth={2}
-                strokeDasharray="5 4"
-                dot={{ r: 2.5, fill: "var(--target)" }}
-                isAnimationActive={false}
-              />
-              <Line
-                dataKey="simulated"
-                name="Simulated"
-                stroke="var(--series-1)"
-                strokeWidth={2.5}
-                dot={{ r: 3, fill: "var(--series-1)" }}
-                isAnimationActive={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <ResultTile
-            label="Projected Δ Net Sales"
-            value={money(result.deltaNetSalesM)}
-            detail={`Next 6 months: $${result.simulatedNetSalesM}M vs $${result.currentNetSalesM}M`}
-            tone={result.deltaNetSalesM}
-          />
-          <ResultTile
-            label="Incremental Paid Patients"
-            value={signed(result.incrementalPatients)}
-            detail={`${result.paidStartsPerMonth} new paid a month vs ${result.baselinePaidStartsPerMonth}`}
-            tone={result.incrementalPatients}
-          />
+        </>
+      }
+      chartTitle="Projected Net Sales: Current vs Simulated"
+      chartSubtitle={`${where} · $M a month · actual Jul–Sep, projected ${simulatorMonths[0]}–${simulatorMonths[simulatorMonths.length - 1]}`}
+      chart={<SalesChart chart={result.chart} />}
+      note={`Current trajectory carries the last three months' trend forward; levers add or remove paid doses at $${netPerVial / 1000}k net per vial.`}
+      tiles={
+        <>
+          <SalesTiles result={result} />
           <ResultTile
             label="Effective Referral → Paid"
             value={`${result.effectiveReferralToPaidPct}%`}
@@ -252,13 +421,202 @@ function Simulator({ baseline, geography }: { baseline: SimulatorBaseline; geogr
             }
             tone={result.copayRoi ?? 0}
           />
+        </>
+      }
+    />
+  );
+}
+
+function SimulatorLayout<Levers>({
+  where,
+  subtitle = `${where} launch-to-date figures are the starting point`,
+  changed,
+  onReset,
+  presets,
+  onPreset,
+  levers,
+  chartTitle,
+  chartSubtitle,
+  chart,
+  tiles,
+  note,
+}: {
+  where: string;
+  subtitle?: string;
+  changed: boolean;
+  onReset: () => void;
+  presets: { label: string; levers: Levers }[];
+  onPreset: (levers: Levers) => void;
+  levers: ReactNode;
+  chartTitle: string;
+  chartSubtitle: string;
+  chart: ReactNode;
+  tiles: ReactNode;
+  note: string;
+}) {
+  return (
+    // Assumptions (a third of the width, at least 220px) and the chart stay side by side, filling the height
+    // between the header and the tab bar. Only phone widths stack them.
+    <section
+      aria-label="What-if simulator"
+      className="grid grid-cols-1 gap-4 sm:min-h-[calc(100dvh-11.5rem)] sm:grid-cols-[minmax(220px,1fr)_minmax(0,2fr)]"
+    >
+      <DashboardPanel
+        title="Assumptions"
+        subtitle={subtitle}
+        className="flex min-w-0 flex-col"
+        action={
+          <button
+            type="button"
+            onClick={onReset}
+            disabled={!changed}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-secondary disabled:pointer-events-none disabled:opacity-40"
+          >
+            <RotateCcw size={12} aria-hidden="true" />
+            Reset
+          </button>
+        }
+      >
+        <ScenarioSelect />
+        <div className="mb-4 flex flex-wrap gap-1.5">
+          {presets.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              onClick={() => onPreset(preset.levers)}
+              className="rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground transition-colors hover:bg-primary hover:text-primary-foreground"
+            >
+              {preset.label}
+            </button>
+          ))}
         </div>
-        <p className="mt-2 text-[11px] text-muted-foreground">
-          Current trajectory carries the last three months' trend forward; levers add or remove
-          paid doses at ${netPerVial / 1000}k net per vial.
-        </p>
+
+        {/* Four equal rows, so the levers share the pane height evenly. */}
+        <div className="grid flex-1 auto-rows-fr gap-3">{levers}</div>
+      </DashboardPanel>
+
+      <DashboardPanel title={chartTitle} subtitle={chartSubtitle} className="flex min-w-0 flex-col">
+        {chart}
+        <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">{tiles}</div>
+        <p className="mt-2 text-[11px] text-muted-foreground">{note}</p>
       </DashboardPanel>
     </section>
+  );
+}
+
+function SalesChart({ chart }: { chart: { month: string; current: number; simulated: number }[] }) {
+  return (
+    <>
+      <ChartLegend
+        textSize="text-[13px]"
+        items={[
+          { label: "Current trajectory", className: "bg-target" },
+          { label: "Simulated", className: "bg-series-1" },
+        ]}
+      />
+      <div className="min-h-72 flex-1">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chart} margin={{ top: 16, right: 20, bottom: 4, left: 0 }}>
+            <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 4" />
+            <XAxis dataKey="month" tick={chartTick} tickLine={false} axisLine={false} />
+            <YAxis
+              tick={chartTick}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(value: number) => `$${value}M`}
+              domain={[0, "auto"]}
+            />
+            <Tooltip
+              {...chartTooltip}
+              cursor={{ stroke: "var(--color-border)" }}
+              formatter={(value) => `$${Number(value).toFixed(2)}M`}
+            />
+            <ReferenceLine
+              x="Sep"
+              stroke="var(--color-muted-foreground)"
+              strokeDasharray="2 3"
+              label={{ value: "Projected →", position: "insideTopRight", ...chartTick }}
+            />
+            <Line
+              dataKey="current"
+              name="Current trajectory"
+              stroke="var(--target)"
+              strokeWidth={2}
+              strokeDasharray="5 4"
+              dot={{ r: 2.5, fill: "var(--target)" }}
+              isAnimationActive={false}
+            />
+            <Line
+              dataKey="simulated"
+              name="Simulated"
+              stroke="var(--series-1)"
+              strokeWidth={2.5}
+              dot={{ r: 3, fill: "var(--series-1)" }}
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </>
+  );
+}
+
+// Picks the scenario's levers. With only one scenario available, it shows which one.
+function ScenarioSelect() {
+  const { scenarios, scenario, setScenario } = useContext(SimulatorLeversContext);
+  return (
+    <label className="mb-3 flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+      Levers
+      <Select
+        value={scenario}
+        onValueChange={(value) => setScenario(value as SimulatorScenario)}
+        disabled={scenarios.length < 2}
+      >
+        <SelectTrigger
+          aria-label="Simulator levers"
+          className="h-8 w-44 rounded-md border-border bg-card px-2.5 text-xs font-semibold text-primary shadow-none"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {scenarios.map((item) => (
+            <SelectItem key={item} value={item}>
+              {item}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </label>
+  );
+}
+
+function SalesTiles({
+  result,
+}: {
+  result: {
+    deltaNetSalesM: number;
+    simulatedNetSalesM: number;
+    currentNetSalesM: number;
+    incrementalPatients: number;
+    paidStartsPerMonth: number;
+    baselinePaidStartsPerMonth: number;
+  };
+}) {
+  return (
+    <>
+      <ResultTile
+        label="Projected Δ Net Sales"
+        value={money(result.deltaNetSalesM)}
+        detail={`Next 6 months: $${result.simulatedNetSalesM}M vs $${result.currentNetSalesM}M`}
+        tone={result.deltaNetSalesM}
+      />
+      <ResultTile
+        label="Incremental Paid Patients"
+        value={signed(result.incrementalPatients)}
+        detail={`${result.paidStartsPerMonth} new paid a month vs ${result.baselinePaidStartsPerMonth}`}
+        tone={result.incrementalPatients}
+      />
+    </>
   );
 }
 
@@ -271,6 +629,7 @@ function Lever({
   baseline,
   rule,
   range,
+  formatBound = String,
   step,
   onChange,
 }: {
@@ -282,6 +641,7 @@ function Lever({
   baseline: string;
   rule: string;
   range: { min: number; max: number };
+  formatBound?: (value: number) => string;
   step: number;
   onChange: (value: number) => void;
 }) {
@@ -305,8 +665,8 @@ function Lever({
         onValueChange={([next]) => next !== undefined && onChange(next)}
       />
       <div className="flex justify-between text-[10px] tabular-nums text-muted-foreground">
-        <span>{range.min}</span>
-        <span>{range.max}</span>
+        <span>{formatBound(range.min)}</span>
+        <span>{formatBound(range.max)}</span>
       </div>
       <p className="text-[11px] leading-snug text-muted-foreground">
         <span className="font-medium text-foreground">Today:</span> {baseline}

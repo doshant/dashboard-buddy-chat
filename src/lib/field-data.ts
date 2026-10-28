@@ -3,7 +3,7 @@ import type { PeriodWindow } from "@/lib/scope";
 
 // Field figures are stored as raw counts and every total, rate and average is derived, so the
 // cards, charts and regional table always agree. Prescriber counts come from the launch data.
-// Launch month M1 is January 2026. `start` limits call totals and averages to the period.
+// Months run Jan–Sep 2026; launch was in January. `start` limits call totals and averages to the period.
 
 const share = (part: number, whole: number) => (whole ? Math.round((part / whole) * 1000) / 10 : 0);
 const round1 = (value: number) => Math.round(value * 10) / 10;
@@ -18,7 +18,6 @@ export type FieldRaw = {
   // Calls by month and type. `sellingDays` counts weekdays; target and reached HCPs are cumulative.
   months: {
     month: string;
-    calendar: string;
     sellingDays: number;
     faceToFace: number;
     virtual: number;
@@ -34,8 +33,7 @@ export type FieldRaw = {
 export const nationalFieldRaw: FieldRaw = {
   months: [
     {
-      month: "M1",
-      calendar: "Jan",
+      month: "Jan",
       sellingDays: 22,
       faceToFace: 38,
       virtual: 16,
@@ -44,8 +42,7 @@ export const nationalFieldRaw: FieldRaw = {
       reached: 41,
     },
     {
-      month: "M2",
-      calendar: "Feb",
+      month: "Feb",
       sellingDays: 20,
       faceToFace: 44,
       virtual: 18,
@@ -54,8 +51,7 @@ export const nationalFieldRaw: FieldRaw = {
       reached: 62,
     },
     {
-      month: "M3",
-      calendar: "Mar",
+      month: "Mar",
       sellingDays: 22,
       faceToFace: 49,
       virtual: 21,
@@ -64,8 +60,7 @@ export const nationalFieldRaw: FieldRaw = {
       reached: 78,
     },
     {
-      month: "M4",
-      calendar: "Apr",
+      month: "Apr",
       sellingDays: 22,
       faceToFace: 53,
       virtual: 23,
@@ -74,8 +69,7 @@ export const nationalFieldRaw: FieldRaw = {
       reached: 91,
     },
     {
-      month: "M5",
-      calendar: "May",
+      month: "May",
       sellingDays: 21,
       faceToFace: 57,
       virtual: 25,
@@ -84,8 +78,7 @@ export const nationalFieldRaw: FieldRaw = {
       reached: 101,
     },
     {
-      month: "M6",
-      calendar: "Jun",
+      month: "Jun",
       sellingDays: 22,
       faceToFace: 62,
       virtual: 27,
@@ -94,8 +87,7 @@ export const nationalFieldRaw: FieldRaw = {
       reached: 110,
     },
     {
-      month: "M7",
-      calendar: "Jul",
+      month: "Jul",
       sellingDays: 23,
       faceToFace: 66,
       virtual: 29,
@@ -104,8 +96,7 @@ export const nationalFieldRaw: FieldRaw = {
       reached: 117,
     },
     {
-      month: "M8",
-      calendar: "Aug",
+      month: "Aug",
       sellingDays: 21,
       faceToFace: 70,
       virtual: 31,
@@ -114,8 +105,7 @@ export const nationalFieldRaw: FieldRaw = {
       reached: 122,
     },
     {
-      month: "M9",
-      calendar: "Sep",
+      month: "Sep",
       sellingDays: 22,
       faceToFace: 75,
       virtual: 33,

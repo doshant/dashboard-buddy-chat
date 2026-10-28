@@ -140,6 +140,39 @@ export function DashboardPanel({
   );
 }
 
+// A small segmented control for switching a panel's view, placed in the panel's `action` slot.
+export function ViewToggle<Key extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: readonly { key: Key; label: string }[];
+  value: Key;
+  onChange: (key: Key) => void;
+}) {
+  return (
+    <div
+      className="flex shrink-0 rounded-md border border-border p-0.5"
+      role="group"
+      aria-label={label}
+    >
+      {options.map((item) => (
+        <button
+          key={item.key}
+          type="button"
+          aria-pressed={value === item.key}
+          onClick={() => onChange(item.key)}
+          className={`rounded px-2 py-1 text-[11px] font-medium transition-colors ${value === item.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function ChartLegend({
   items,
   textSize = "text-[10px]",
@@ -176,10 +209,13 @@ export function StackedMonthlyBars({
   data,
   series,
   formatValue = groupThousands,
+  formatTick = formatValue,
 }: {
   data: ({ month: string; total: number } & Record<string, string | number>)[];
   series: Series[];
   formatValue?: (value: number) => string;
+  // Axis ticks are whole numbers, so they can drop decimals the bar labels keep.
+  formatTick?: (value: number) => string;
 }) {
   return (
     <>
@@ -193,7 +229,7 @@ export function StackedMonthlyBars({
               tickLine={false}
               axisLine={false}
               tick={axisTick}
-              tickFormatter={(value) => formatValue(Number(value))}
+              tickFormatter={(value) => formatTick(Number(value))}
             />
             <Tooltip {...tooltipProps} formatter={(value) => formatValue(Number(value))} />
             {series.map((item, index) => {

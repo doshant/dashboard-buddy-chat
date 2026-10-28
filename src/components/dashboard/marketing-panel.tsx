@@ -1,82 +1,75 @@
-import { Eye, Globe, Link, MailCheck, MailOpen, MousePointerClick, Target } from "lucide-react";
-import {
-  CartesianGrid,
-  LabelList,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
-  axisTick,
-  tooltipProps,
-  valueLabel,
-  type Series,
-} from "@/components/dashboard/chart-theme";
+import { useState } from "react";
+import { Eye, Globe, Link, MailCheck, MailOpen, Target, Wallet } from "lucide-react";
+import type { Series } from "@/components/dashboard/chart-theme";
 import {
   DashboardPanel,
   RankedBars,
   StackedCategoryBars,
   StackedMonthlyBars,
   StatCard,
+  ViewToggle,
 } from "@/components/dashboard/primitives";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
-import { formatCount, formatRate, withRates } from "@/lib/marketing-data";
+import {
+  formatCount,
+  formatDollars,
+  formatRate,
+  formatSpend,
+  withRates,
+} from "@/lib/marketing-data";
 
 type RegionRow = ReturnType<typeof withRates>;
 
-const channelSeries: Series[] = [
-  { key: "display", label: "Display ads", color: "series-1" },
-  { key: "video", label: "Pre-roll video", color: "series-2" },
-  { key: "social", label: "Social media", color: "series-3" },
-  { key: "search", label: "Paid search", color: "series-4" },
-  { key: "other", label: "Other", color: "target" },
+const spendSeries: Series[] = [
+  { key: "email", label: "HCP email", color: "series-1" },
+  { key: "social", label: "Social media", color: "series-2" },
+  { key: "search", label: "Paid search", color: "series-3" },
 ];
-
+const hcpSeries: Series[] = [{ key: "hcp", label: "HCP", color: "series-1" }];
 const audienceSeries: Series[] = [
   { key: "hcp", label: "HCP", color: "series-1" },
   { key: "patient", label: "Patient", color: "series-2" },
 ];
 
+const channelViews = [
+  { key: "spend", label: "Spend" },
+  { key: "impressions", label: "Impressions" },
+] as const;
+
+const dollarTick = (value: number) => (value ? `$${value / 1000}k` : "$0");
+
 const regionColumns = [
-  { label: "Impressions", value: (row: RegionRow) => formatCount(row.impressions) },
-  {
-    label: "Engagement rate",
-    value: (row: RegionRow) => formatRate(row.engagementRate),
-  },
   { label: "Website visits", value: (row: RegionRow) => formatCount(row.visits) },
   { label: "HVA rate", value: (row: RegionRow) => formatRate(row.hvaRate) },
-  { label: "Delivered emails", value: (row: RegionRow) => formatCount(row.delivered) },
-  { label: "Open rate", value: (row: RegionRow) => formatRate(row.openRate) },
-  { label: "Click rate", value: (row: RegionRow) => formatRate(row.clickRate) },
+  { label: "HCP open rate", value: (row: RegionRow) => formatRate(row.openRate) },
+  { label: "HCP click rate", value: (row: RegionRow) => formatRate(row.clickRate) },
+  { label: "Social engagement", value: (row: RegionRow) => formatRate(row.socialEngagementRate) },
+  { label: "Search CTR", value: (row: RegionRow) => formatRate(row.searchCtr) },
+  { label: "Spend", value: (row: RegionRow) => formatSpend(row.spend) },
 ];
 
 export function MarketingPanel() {
   const { marketing, regional, scope, period } = useDashboardData();
   const {
-    emailByAudience,
     emailFunnel,
-    engagementByMonth,
     highValueActions,
     impressionsByChannel,
-    impressionsByMonth,
     marketingKpis,
+    spendByChannel,
+    spendByMonth,
     websiteVisitsByMonth,
   } = marketing;
   const { rows: regionalSummary, total: regionalTotal } = regional.marketing;
-  const { impressions, engagement, website, hva, email } = marketingKpis;
-  const funnelRows = emailFunnel.map((row, i) => {
-    const previous = emailFunnel[i - 1];
+  const { spend, website, hva, email, social, search, paidMedia } = marketingKpis;
+  const { firstMonthLabel: firstMonth, latestMonthLabel: latestMonth } = marketingKpis;
+  const [channelView, setChannelView] = useState<(typeof channelViews)[number]["key"]>("spend");
+  const funnelSteps = emailFunnel.slice(1).map((row, i) => {
+    const previous = emailFunnel[i]!;
     return {
       ...row,
-      step: previous
-        ? `${Math.round((row.total / previous.total) * 1000) / 10}% of ${previous.stage.toLowerCase()}`
-        : "—",
+      step: `${Math.round((row.total / previous.total) * 1000) / 10}% of ${previous.stage.toLowerCase()}`,
     };
   });
-  const [hcpEmail, patientEmail] = emailByAudience;
 
   return (
     <>
@@ -85,31 +78,31 @@ export function MarketingPanel() {
         className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7"
       >
         <StatCard
-          title="Media Impressions"
-          Icon={Eye}
-          value={formatCount(impressions.total)}
-          detail="Display, pre-roll video, social and paid search"
+          title="Total Marketing Spend"
+          Icon={Wallet}
+          value={formatSpend(spend.total)}
+          detail={`HCP email ${formatSpend(spend.email)} · Social ${formatSpend(spend.social)} · Search ${formatSpend(spend.search)}`}
           comparison={{
-            text: `${formatCount(impressions.latestMonth)} in ${impressions.latestMonthLabel}, up from ${formatCount(impressions.firstMonth)} in ${impressions.firstMonthLabel}`,
+            text: `${formatSpend(spend.latestMonth)} in ${latestMonth}, up from ${formatSpend(spend.firstMonth)} in ${firstMonth}`,
             direction: "up",
           }}
         />
         <StatCard
-          title="Click & Video Engagement"
-          Icon={MousePointerClick}
-          value={formatRate(engagement.rate)}
-          detail={`${formatCount(engagement.clicks)} clicks + ${formatCount(engagement.videoViews)} video views`}
-          comparison={{
-            text: `${formatRate(engagement.latestMonthRate)} in ${impressions.latestMonthLabel} vs ${formatRate(engagement.firstMonthRate)} in ${impressions.firstMonthLabel}`,
-            direction: "up",
-          }}
+          title="Total Impressions"
+          Icon={Eye}
+          value={formatCount(paidMedia.impressions)}
+          detail={`Social ${formatCount(social.impressions)} · Search ${formatCount(search.impressions)}`}
+          comparison={{ text: `${formatDollars(paidMedia.cpm)} per 1,000 impressions` }}
         />
         <StatCard
           title="Website Visits"
           Icon={Globe}
           value={formatCount(website.total)}
           detail={`HCP ${formatCount(website.hcp)} · Patient ${formatCount(website.patient)}`}
-          comparison={{ text: `+${website.growthVsPriorPct}% in M9 vs M8`, direction: "up" }}
+          comparison={{
+            text: `${website.growthVsPriorPct > 0 ? "+" : ""}${website.growthVsPriorPct}% in ${latestMonth} vs prior month`,
+            direction: website.growthVsPriorPct >= 0 ? "up" : "down",
+          }}
         />
         <StatCard
           title="HVA Rate"
@@ -119,23 +112,21 @@ export function MarketingPanel() {
           comparison={{ text: "Rep requests, support sign-ups, downloads" }}
         />
         <StatCard
-          title="Delivered Emails"
+          title="HCP Emails Delivered"
           Icon={MailCheck}
           value={formatCount(email.delivered)}
           detail={`${formatCount(email.sent)} sent less ${formatCount(email.bounced)} bounces`}
-          comparison={{
-            text: `HCP ${formatCount(hcpEmail?.delivered ?? 0)} · Patient ${formatCount(patientEmail?.delivered ?? 0)}`,
-          }}
+          comparison={{ text: "HCP campaigns only" }}
         />
         <StatCard
-          title="Email Open Rate"
+          title="HCP Email Open Rate"
           Icon={MailOpen}
           value={formatRate(email.openRate)}
           detail={`${formatCount(email.opened)} unique opens of ${formatCount(email.delivered)} delivered`}
           comparison={{ text: `Click-to-open ${formatRate(email.clickToOpenRate)}` }}
         />
         <StatCard
-          title="Email Click Rate"
+          title="HCP Email Click Rate"
           Icon={Link}
           value={formatRate(email.clickRate)}
           detail={`${formatCount(email.clicked)} unique clicks of ${formatCount(email.delivered)} delivered`}
@@ -148,104 +139,67 @@ export function MarketingPanel() {
         className="dashboard-chart-grid grid grid-cols-12 gap-4"
       >
         <DashboardPanel
-          title="Media Impressions"
-          subtitle="Monthly paid media impressions (k) by channel · M1 = Jan 2026"
+          title="Marketing Spend by Month"
+          subtitle="HCP email, social media and paid search spend · Jan–Sep 2026"
           className="col-span-12 xl:col-span-8"
         >
-          <StackedMonthlyBars data={impressionsByMonth} series={channelSeries} />
-        </DashboardPanel>
-
-        <DashboardPanel
-          title="Impressions by Channel"
-          subtitle={`${formatCount(impressions.total)} impressions ${period.long} (k) · share of total`}
-          className="col-span-12 md:col-span-6 xl:col-span-4"
-        >
-          <RankedBars
-            unit="Impressions (k)"
-            categoryWidth={92}
-            formatValue={(value) => value.toLocaleString("en-US")}
-            data={impressionsByChannel}
-          />
-        </DashboardPanel>
-
-        <DashboardPanel
-          title="Website Traffic Trend"
-          subtitle="Monthly sessions on the HCP and patient brand websites"
-          className="col-span-12 md:col-span-6 xl:col-span-6"
-        >
           <StackedMonthlyBars
-            data={websiteVisitsByMonth}
-            series={audienceSeries}
-            formatValue={formatCount}
+            data={spendByMonth}
+            series={spendSeries}
+            formatValue={formatSpend}
+            formatTick={dollarTick}
           />
         </DashboardPanel>
 
         <DashboardPanel
-          title="Click & Video Engagement Rate"
-          subtitle="(Ad clicks + video views) ÷ media impressions, by month"
-          className="col-span-12 md:col-span-6 xl:col-span-6"
+          title={channelView === "spend" ? "Spend by Channel" : "Impressions by Channel"}
+          subtitle={
+            channelView === "spend"
+              ? `${formatSpend(spend.total)} spent ${period.long} · share of total`
+              : `${formatCount(paidMedia.impressions)} impressions ${period.long} (k) · share of total`
+          }
+          className="col-span-12 md:col-span-6 xl:col-span-4"
+          action={
+            <ViewToggle
+              label="Channel view"
+              options={channelViews}
+              value={channelView}
+              onChange={setChannelView}
+            />
+          }
         >
-          <div className="dashboard-chart h-[220px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={engagementByMonth}
-                margin={{ top: 22, right: 16, bottom: 2, left: -20 }}
-              >
-                <CartesianGrid
-                  vertical={false}
-                  stroke="var(--color-border)"
-                  strokeDasharray="3 4"
-                />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} tick={axisTick} />
-                <YAxis
-                  domain={[0, 10]}
-                  tickLine={false}
-                  axisLine={false}
-                  tick={axisTick}
-                  tickFormatter={(v) => `${v}%`}
-                />
-                <Tooltip
-                  {...tooltipProps}
-                  cursor={{ stroke: "var(--color-border)" }}
-                  formatter={(value) => [`${value}%`, "Engagement rate"]}
-                />
-                <Line
-                  dataKey="rate"
-                  name="Engagement rate"
-                  type="monotone"
-                  stroke="var(--series-1)"
-                  strokeWidth={2}
-                  dot={{ r: 3, fill: "var(--series-1)" }}
-                  activeDot={{ r: 5 }}
-                  isAnimationActive={false}
-                >
-                  <LabelList
-                    dataKey="rate"
-                    position="top"
-                    style={valueLabel}
-                    formatter={(v: unknown) => formatRate(Number(v))}
-                  />
-                </Line>
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          {channelView === "spend" ? (
+            <RankedBars
+              unit="Spend"
+              categoryWidth={96}
+              formatValue={formatSpend}
+              data={spendByChannel}
+            />
+          ) : (
+            <RankedBars
+              unit="Impressions (k)"
+              categoryWidth={96}
+              formatValue={(value) => value.toLocaleString("en-US")}
+              data={impressionsByChannel}
+            />
+          )}
         </DashboardPanel>
 
         <DashboardPanel
-          title="Email Performance Funnel"
-          subtitle="Delivered → opened → clicked → converted (HVA), HCP and patient campaigns"
-          className="col-span-12 md:col-span-6 xl:col-span-7"
+          title="HCP Email Funnel"
+          subtitle="Delivered → opened → clicked → converted (HVA)"
+          className="col-span-12 md:col-span-6 xl:col-span-4"
         >
           <StackedCategoryBars
             data={emailFunnel}
             categoryKey="stage"
             categoryWidth={96}
-            height={212}
-            series={audienceSeries}
+            height={180}
+            series={hcpSeries}
             formatValue={formatCount}
           />
           <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
-            {funnelRows.slice(1).map((row) => (
+            {funnelSteps.map((row) => (
               <div key={row.stage} className="rounded-md bg-secondary/60 px-2 py-1.5">
                 <dt className="text-[10px] text-muted-foreground">{row.stage}</dt>
                 <dd className="text-sm font-semibold tabular-nums">
@@ -258,9 +212,21 @@ export function MarketingPanel() {
         </DashboardPanel>
 
         <DashboardPanel
+          title="Website Traffic Trend"
+          subtitle="Monthly sessions on the HCP and patient brand websites"
+          className="col-span-12 md:col-span-6 xl:col-span-4"
+        >
+          <StackedMonthlyBars
+            data={websiteVisitsByMonth}
+            series={audienceSeries}
+            formatValue={formatCount}
+          />
+        </DashboardPanel>
+
+        <DashboardPanel
           title="High Value Actions"
-          subtitle={`${hva.total.toLocaleString("en-US")} visits completing an HVA · ${formatRate(hva.rate)} of visits`}
-          className="col-span-12 md:col-span-6 xl:col-span-5"
+          subtitle={`${formatCount(hva.total)} visits completing an HVA · ${formatRate(hva.rate)} of visits`}
+          className="col-span-12 md:col-span-6 xl:col-span-4"
         >
           <RankedBars
             unit="HVAs"
@@ -287,7 +253,7 @@ export function MarketingPanel() {
                     <th
                       key={column.label}
                       scope="col"
-                      className="px-3 py-2 text-right font-semibold"
+                      className="px-3 py-2 text-center font-semibold"
                     >
                       {column.label}
                     </th>
@@ -304,7 +270,7 @@ export function MarketingPanel() {
                       {row.region}
                     </th>
                     {regionColumns.map((column) => (
-                      <td key={column.label} className="px-3 py-2 text-right">
+                      <td key={column.label} className="px-3 py-2 text-center">
                         {column.value(row)}
                       </td>
                     ))}
@@ -317,7 +283,7 @@ export function MarketingPanel() {
                     {regionalTotal.region}
                   </th>
                   {regionColumns.map((column) => (
-                    <td key={column.label} className="px-3 py-2 text-right">
+                    <td key={column.label} className="px-3 py-2 text-center">
                       {column.value(regionalTotal)}
                     </td>
                   ))}

@@ -18,14 +18,14 @@ const marketingQuestion = "How are our emails performing?";
 const fieldQuestion = "How many calls has the field team made?";
 
 describe("Demo profile access", () => {
-  it("gives Jenny every tab, and Bob and Jeff the Executive Summary plus their own tab", () => {
+  it("gives Jenny every tab, and Bob and Jeff the Executive Summary, their own tab and the simulator", () => {
     expect(byName("Jenny").panels).toEqual(panelLabels);
     expect(byName("Bob").panels).toEqual([
       "Executive Summary",
       "Market Access",
       "What-If Simulator",
     ]);
-    expect(byName("Jeff").panels).toEqual(["Executive Summary", "Marketing"]);
+    expect(byName("Jeff").panels).toEqual(["Executive Summary", "Marketing", "What-If Simulator"]);
   });
 
   it("gives every profile the Executive Summary, and answers its questions for everyone", () => {
@@ -54,10 +54,10 @@ describe("Demo profile access", () => {
     expect(resolveDashboardAnswer(fieldQuestion, bob).response).toBe(
       "That question draws on Field Activity data, which isn't part of your access. You can ask about Executive Summary, Market Access, What-If Simulator.",
     );
-    expect(resolveDashboardAnswer(marketingQuestion, bob).response).not.toContain("67.4k");
+    expect(resolveDashboardAnswer(marketingQuestion, bob).response).not.toContain("46.7k");
 
     const jeff = byName("Jeff").panels;
-    expect(resolveDashboardAnswer(marketingQuestion, jeff).response).toContain("67.4k");
+    expect(resolveDashboardAnswer(marketingQuestion, jeff).response).toContain("46.7k");
     expect(resolveDashboardAnswer(marketAccessQuestion, jeff).response).toContain(
       "isn't part of your access",
     );
@@ -65,7 +65,7 @@ describe("Demo profile access", () => {
 
   it("only suggests follow-up questions the profile is allowed to ask", () => {
     for (const profile of profiles) {
-      const asked = profile.panels.flatMap((panel) => starterQuestionsFor(panel));
+      const asked = profile.panels.flatMap((panel) => starterQuestionsFor(panel, profile.panels));
       for (const question of [...asked, overviewQuestion, "Tell me a joke"]) {
         const { suggestions } = resolveDashboardAnswer(question, profile.panels);
         expect(suggestions.length).toBeGreaterThan(0);

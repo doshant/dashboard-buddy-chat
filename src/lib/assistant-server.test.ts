@@ -3,7 +3,7 @@ import { findClaudeCode, promptFor } from "@/lib/assistant-claude-code";
 import { buildAssistantContext } from "@/lib/assistant-context";
 import { assistantInstructions } from "@/lib/assistant-prompt";
 import {
-  assistantModel,
+  defaultAssistantModel,
   buildClaudeRequest,
   handleChatRequest,
   type AssistantClient,
@@ -60,7 +60,7 @@ describe("Live assistant data", () => {
     expect(jeff.marketAccess).toBeUndefined();
     expect(jeff.fieldActivity).toBeUndefined();
     expect(jeff.outlook.marketAccess).toBeUndefined();
-    expect(jeff.restrictedTabs).toEqual(["Market Access", "Field Activity", "What-If Simulator"]);
+    expect(jeff.restrictedTabs).toEqual(["Market Access", "Field Activity"]);
   });
 
   it("follows the selected geography and period", () => {
@@ -84,16 +84,42 @@ describe("Live assistant data", () => {
 
   it("calls Claude Opus 5.5 with the data cached after the instructions", () => {
     const request = buildClaudeRequest(validBody as never);
-    expect(request.model).toBe(assistantModel);
+    expect(request.model).toBe(defaultAssistantModel);
     expect(request.model).toBe("claude-opus-5-5");
     const system = request.system as { text: string; cache_control?: unknown }[];
     expect(system[0]?.text).toBe(assistantInstructions);
     expect(system[1]?.text.startsWith("DATA\n")).toBe(true);
     expect(system[1]?.cache_control).toEqual({ type: "ephemeral" });
   });
+
+  it("runs Claude Sonnet 5.5 with thinking off when ASSISTANT_MODEL asks for it", () => {
+    vi.stubEnv("ASSISTANT_MODEL", "claude-sonnet-5-5");
+    try {
+      const request = buildClaudeRequest(validBody as never);
+      expect(request.model).toBe("claude-sonnet-5-5");
+      expect(request.thinking).toEqual({ type: "between_tools" });
+      expect(request.output_config).toEqual({ effort: "low" });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });
 
 describe("Chat endpoint", () => {
+  it("warms the client up for a profile and scope without asking a question", async () => {
+    const { client, stream } = fakeClient([]);
+    const warmUp = vi.fn();
+    const response = await handleChatRequest(
+      chatRequest({ warmUp: true, profileId: "jenny", scope: nation }),
+      () => ({ ...client, warmUp }),
+    );
+    expect(response.status).toBe(204);
+    expect(stream).not.toHaveBeenCalled();
+    expect(warmUp).toHaveBeenCalledOnce();
+    const system = warmUp.mock.calls[0]![0].system as { text: string }[];
+    expect(system[1]?.text.startsWith("DATA\n")).toBe(true);
+  });
+
   it("streams Claude's answer as plain text", async () => {
     const { client, stream } = fakeClient(["**Net sales are $24.5M**", ", 94% of forecast."]);
     const response = await handleChatRequest(chatRequest(validBody), () => client);

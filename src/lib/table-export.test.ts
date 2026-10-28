@@ -51,7 +51,7 @@ describe("Assistant table export", () => {
     ]);
     expect(exportFileName("Payer mix")).toBe("Payer mix");
     expect(exportFileName("Sales / vials: Q3?")).toBe("Sales vials Q3");
-    expect(exportFileName("")).toBe("Dashboard Assistant");
+    expect(exportFileName("")).toBe("Clara");
   });
 
   it("titles every reply that has a table after what it shows", () => {

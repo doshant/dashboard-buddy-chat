@@ -24,12 +24,12 @@ import {
   vialsAdministered,
 } from "@/lib/market-access-data";
 import {
-  emailByAudience,
-  engagementByMonth,
   highValueActions,
-  impressionsByMonth,
   marketingKpis,
+  paidMediaByMonth,
   regionalSummary,
+  searchByMonth,
+  visitsBySourceByMonth,
   websiteVisitsByMonth,
 } from "@/lib/marketing-data";
 
@@ -160,21 +160,18 @@ export const trafficOutlook = {
 };
 
 // --- Where to focus marketing (Marketing) ---------------------------------------------------
-const [hcpEmail, patientEmail] = emailByAudience;
+// Leads with winning back paid search (see the paid search story below), then HCP email and the
+// weakest region.
+const { email: hcpEmail } = marketingKpis;
 const weakest = [...regionalSummary].sort((a, b) => a.hvaRate - b.hvaRate)[0]!;
 export const marketingActions = {
   weakestRegion: weakest.region,
   weakestHvaRate: weakest.hvaRate,
   weakestOpenRate: weakest.openRate,
   nationalHvaRate: marketingKpis.hva.rate,
-  nationalOpenRate: marketingKpis.email.openRate,
-  hcpOpenRate: round1(((hcpEmail?.opened ?? 0) / (hcpEmail?.delivered ?? 1)) * 100),
-  patientOpenRate: round1(((patientEmail?.opened ?? 0) / (patientEmail?.delivered ?? 1)) * 100),
-  hcpOpensPerPoint: Math.round((hcpEmail?.delivered ?? 0) / 100),
-  hcpConversion: round1(((hcpEmail?.converted ?? 0) / (hcpEmail?.delivered ?? 1)) * 100),
-  patientConversion: round1(
-    ((patientEmail?.converted ?? 0) / (patientEmail?.delivered ?? 1)) * 100,
-  ),
+  nationalOpenRate: hcpEmail.openRate,
+  hcpOpenRate: hcpEmail.openRate,
+  hcpOpensPerPoint: Math.round(hcpEmail.delivered / 100),
 };
 
 // --- HCP reach outlook (Field Activity) -----------------------------------------------------
@@ -315,17 +312,19 @@ export const stopActions = {
 };
 
 // --- Media outlook (Marketing) --------------------------------------------------------------
-const impressionsAhead = projectAhead(impressionsByMonth.map((row) => row.total));
-const engagementAhead = projectAhead(engagementByMonth.map((row) => row.rate));
+// Paid media is social plus paid search.
+const impressionsAhead = projectAhead(paidMediaByMonth.map((row) => row.impressionsK));
+const clicksAhead = projectAhead(paidMediaByMonth.map((row) => row.clicks));
 export const mediaOutlook = {
   months: projectedMonths.map((month, i) => ({
     month,
     impressionsK: Math.round(impressionsAhead[i] ?? 0),
-    engagementRate: round1(engagementAhead[i] ?? 0),
+    clicks: Math.round(clicksAhead[i] ?? 0),
   })),
   q4ImpressionsK: Math.round(sum(impressionsAhead)),
-  q3ImpressionsK: sum(impressionsByMonth.slice(-3).map((row) => row.total)),
-  latestRate: last(engagementByMonth).rate,
+  q3ImpressionsK: sum(paidMediaByMonth.slice(-3).map((row) => row.impressionsK)),
+  q4Clicks: Math.round(sum(clicksAhead)),
+  latestCtr: last(paidMediaByMonth).ctr,
 };
 
 // --- Turning website visits into rep requests (Marketing) -----------------------------------
@@ -337,6 +336,69 @@ export const hvaActions = {
   repRequestSharePct: Math.round((repRequests / marketingKpis.hva.total) * 100),
   downloads: highValueActions.find((row) => row.label === "Resource download")?.value ?? 0,
   supportSignups: highValueActions.find((row) => row.label === "Support sign-up")?.value ?? 0,
+};
+
+// --- Paid search story (Marketing) ---------------------------------------------------------
+// From mid-August a competitor bids on our search terms: cost per click rises, the capped search
+// budget buys fewer clicks, and site visits fall while social and HCP email keep growing. Compares
+// the latest month with search's best month (July).
+const pctChange = (now: number, before: number) =>
+  before ? Math.round((now / before - 1) * 100) : 0;
+const searchPeakIndex = searchByMonth.reduce(
+  (best, row, i) => (row.clicks > (searchByMonth[best]?.clicks ?? 0) ? i : best),
+  0,
+);
+const searchPeak = searchByMonth[searchPeakIndex]!;
+const searchLatest = last(searchByMonth);
+const sourcesPeak = visitsBySourceByMonth[searchPeakIndex]!;
+const sourcesLatest = last(visitsBySourceByMonth);
+const lostSearchVisits = sum(
+  searchByMonth.slice(searchPeakIndex + 1).map((row) => searchPeak.clicks - row.clicks),
+);
+const searchClicksLost = searchPeak.clicks - searchLatest.clicks;
+export const searchStory = {
+  peakMonth: searchPeak.month,
+  latestMonth: searchLatest.month,
+  // Website visits
+  peakVisits: sourcesPeak.total,
+  latestVisits: sourcesLatest.total,
+  visitsChangePct: pctChange(sourcesLatest.total, sourcesPeak.total),
+  // Visits by source, best search month → latest month
+  sources: (["search", "social", "email", "other"] as const).map((key) => ({
+    key,
+    peak: sourcesPeak[key],
+    latest: sourcesLatest[key],
+    change: sourcesLatest[key] - sourcesPeak[key],
+  })),
+  // Paid search
+  peakClicks: searchPeak.clicks,
+  latestClicks: searchLatest.clicks,
+  clicksChangePct: pctChange(searchLatest.clicks, searchPeak.clicks),
+  peakImpressionsK: searchPeak.impressionsK,
+  latestImpressionsK: searchLatest.impressionsK,
+  impressionsChangePct: pctChange(searchLatest.impressionsK, searchPeak.impressionsK),
+  peakCpc: searchPeak.cpc,
+  latestCpc: searchLatest.cpc,
+  cpcChangePct: pctChange(searchLatest.cpc, searchPeak.cpc),
+  peakSpend: searchPeak.spend,
+  latestSpend: searchLatest.spend,
+  months: searchByMonth.slice(searchPeakIndex).map((row) => ({
+    month: row.month,
+    impressionsK: row.impressionsK,
+    clicks: row.clicks,
+    cpc: row.cpc,
+    spend: row.spend,
+  })),
+  // What it has cost since the peak, at today's HVA rate and rep-request share
+  lostVisits: lostSearchVisits,
+  lostHvas: Math.round((lostSearchVisits * marketingKpis.hva.rate) / 100),
+  lostRepRequests: Math.round((lostSearchVisits * repRequests) / marketingKpis.website.total),
+  // Winning it back
+  clicksLostPerMonth: searchClicksLost,
+  extraBudgetPerMonth: Math.round(searchClicksLost * searchLatest.cpc),
+  clicksAtPeakCpc: Math.round(searchLatest.spend / searchPeak.cpc),
+  socialCostPerVisit: marketingKpis.social.costPerClick,
+  hcpClicksPerPoint: Math.round(marketingKpis.email.delivered / 100),
 };
 
 // --- New prescriber outlook (Field Activity) ------------------------------------------------
@@ -407,15 +469,15 @@ const signalRules: (AttentionSignal & { active: boolean })[] = [
   },
   {
     panel: "Marketing",
-    active: marketingActions.hcpOpenRate < marketingActions.patientOpenRate,
-    question: forwardQuestion("marketingActions"),
-    reason: `HCP emails open at ${marketingActions.hcpOpenRate.toFixed(1)}% vs ${marketingActions.patientOpenRate.toFixed(1)}% for patients`,
+    active: searchStory.visitsChangePct < 0,
+    question: forwardQuestion("visitsDrop"),
+    reason: `Visits down ${Math.abs(searchStory.visitsChangePct)}% since ${searchStory.peakMonth} after months of growth`,
   },
   {
     panel: "Marketing",
-    active: hvaActions.repRequestSharePct < 10,
-    question: forwardQuestion("hvaActions"),
-    reason: `Only ${hvaActions.repRequestSharePct}% of high value actions are rep requests`,
+    active: searchStory.cpcChangePct > 0,
+    question: forwardQuestion("searchDrop"),
+    reason: `Search cost per click up ${searchStory.cpcChangePct}% since ${searchStory.peakMonth}`,
   },
   {
     panel: "Field Activity",

@@ -52,18 +52,18 @@ export const profiles: {
 }[] = [
   { id: "jenny", name: "Jenny", role: "Brand Director", avatar: "👩🏻‍💼", panels: panelLabels },
   {
+    id: "jeff",
+    name: "Jeff",
+    role: "Marketing Manager",
+    avatar: "🧑🏼‍💼",
+    panels: ["Executive Summary", "Marketing", "What-If Simulator"],
+  },
+  {
     id: "bob",
     name: "Bob",
     role: "Market Access Lead",
     avatar: "👨🏽‍💼",
     panels: ["Executive Summary", "Market Access", "What-If Simulator"],
-  },
-  {
-    id: "jeff",
-    name: "Jeff",
-    role: "Marketing Manager",
-    avatar: "🧑🏼‍💼",
-    panels: ["Executive Summary", "Marketing"],
   },
 ];
 
@@ -98,10 +98,10 @@ const starterQuestionsByPanel: Partial<Record<PanelLabel, string[]>> = {
     "How much inventory is in the channel?",
   ],
   Marketing: [
-    "Which media channels drive the most impressions?",
-    "What is our ad engagement rate?",
+    "How much have we spent on marketing?",
+    "Which channels drive our impressions?",
     "How is website traffic trending?",
-    "How are our emails performing?",
+    "How are our HCP emails performing?",
     "Which region is performing best?",
   ],
   "Field Activity": [
@@ -111,7 +111,7 @@ const starterQuestionsByPanel: Partial<Record<PanelLabel, string[]>> = {
     "How are HCPs moving through the engagement funnel?",
     "Which region has the best HCP reach?",
   ],
-  // What-if questions set the simulator's sliders (see whatIfFor in simulator-data).
+  // What-if questions set the simulator's Market Access sliders (see whatIfFor in simulator-data).
   "What-If Simulator": [
     "What if out-of-pocket cost is 20% lower?",
     "What if PA approval is 5 days faster?",
@@ -125,6 +125,11 @@ export type QuestionKind = "Descriptive" | "Predictive" | "Prescriptive";
 // Forward-looking questions: what is likely to happen (predictive) and what to do about it
 // (prescriptive). They aren't offered up front; they follow the descriptive answers they build on.
 const forwardQuestions = {
+  // Paid search story (Marketing): diagnose the visit drop, find the cause, size it, fix it.
+  visitsDrop: { kind: "Prescriptive", question: "Why did website visits drop in September?" },
+  searchDrop: { kind: "Prescriptive", question: "What happened to paid search?" },
+  searchCost: { kind: "Predictive", question: "What is the paid search drop costing us?" },
+  searchActions: { kind: "Prescriptive", question: "How do we win back paid search?" },
   paDenials: { kind: "Prescriptive", question: "Why is our PA approval rate dropping?" },
   paDenialActions: { kind: "Prescriptive", question: "What can we do about PA denials?" },
   salesOutlook: { kind: "Predictive", question: "What will net sales be by year end?" },
@@ -181,7 +186,26 @@ export function questionKind(question: string): QuestionKind {
   );
 }
 
-export function starterQuestionsFor(panel: string) {
+// What-if questions that set the simulator's Marketing sliders (see marketingWhatIfFor in
+// marketing-simulator-data).
+export const marketingWhatIfQuestions = [
+  "What if paid search clicks go back to 6,020?",
+  "What if social impressions rise 20%?",
+  "What if the HCP email open rate rises to 30%?",
+  "What if social impressions fall 10% and search clicks rise to 5,000?",
+];
+
+// The What-If Simulator's questions follow the profile's levers: Marketing, Market Access or both.
+export function starterQuestionsFor(panel: string, panels: readonly PanelLabel[] = panelLabels) {
+  if (panel === "What-If Simulator") {
+    const marketing = panels.includes("Marketing") ? marketingWhatIfQuestions : [];
+    const access = panels.includes("Market Access")
+      ? (starterQuestionsByPanel["What-If Simulator"] ?? [])
+      : [];
+    return marketing.length && access.length
+      ? [...marketing.slice(0, 2), ...access.slice(0, 2)]
+      : [...marketing, ...access];
+  }
   return starterQuestionsByPanel[panel as PanelLabel] ?? starterQuestionsByPanel.Overview ?? [];
 }
 
@@ -400,128 +424,180 @@ export const dashboardAnswers = {
       "What does the payer mix look like?",
     ],
   },
-  mediaChannels: {
-    title: "Paid media by channel",
+  socialMedia: {
+    title: "Social media",
     response: lines(
-      "- **Paid media has delivered 17.4M impressions since launch**, growing from 1.5M in M1 to 2.4M in M9.",
-      "",
-      "| Channel | Impressions | Share |",
-      "| --- | ---: | ---: |",
-      "| Display ads | 6.3M | 36% |",
-      "| Social media | 4.5M | 26% |",
-      "| Pre-roll video | 4.0M | 23% |",
-      "| Paid search | 1.9M | 11% |",
-      "| Other | 0.8M | 4% |",
-      "| **Total** | **17.4M** | **100%** |",
-    ),
-    suggestions: [
-      "What is our ad engagement rate?",
-      "Which region is performing best?",
-      "How is website traffic trending?",
-    ],
-  },
-  adEngagement: {
-    title: "Ad engagement",
-    response: lines(
-      "- **The click & video engagement rate is 7.2%**, and it has risen every month, from 6.4% in M1 to 7.9% in M9.",
+      "- **Paid social has delivered 5.7M impressions since launch**, growing from 470k in Jan to 770k in Sep.",
+      "- Engagement has risen every month, from 4.0% in Jan to 4.8% in Sep.",
       "",
       "| Metric | Value |",
       "| --- | ---: |",
-      "| Impressions | 17.4M |",
-      "| Ad clicks | 78.2k |",
-      "| Video views | 1.2M |",
-      "| Engagement rate | 7.2% |",
+      "| Impressions | 5.7M |",
+      "| Engagements | 250.8k |",
+      "| Engagement rate | 4.4% |",
+      "| Clicks to site | 37.2k |",
+      "| Click-through rate | 0.66% |",
+      "| Spend | $141.3k |",
+      "| Cost per site visit | $3.80 |",
+      "",
+      "Engagements are reactions, comments, shares and video views; spend is $25.00 per 1,000 impressions.",
     ),
     suggestions: [
-      "Which media channels drive the most impressions?",
-      "How is website traffic trending?",
+      "How is paid search performing?",
+      "How much have we spent on marketing?",
       "Which region is performing best?",
+    ],
+  },
+  paidSearch: {
+    title: "Paid search",
+    response: lines(
+      "- **Paid search has sent 43.5k clicks to the brand websites since launch**, but monthly clicks fell from 6.0k in Jul to 3.4k in Sep.",
+      "- Spend held at about $12k a month while cost per click rose from $2.00 to $3.55.",
+      "",
+      "| Metric | Value |",
+      "| --- | ---: |",
+      "| Impressions | 2.1M |",
+      "| Clicks to site | 43.5k |",
+      "| Click-through rate | 2.1% |",
+      "| Spend | $94.4k |",
+      "| Average cost per click | $2.17 |",
+      "| Cost per click, Sep | $3.55 |",
+    ),
+    suggestions: [
+      "What happened to paid search?",
+      "How is social media performing?",
+      "How much have we spent on marketing?",
+    ],
+  },
+  mediaImpressions: {
+    title: "Impressions by channel",
+    response: lines(
+      "- **Social media and paid search have delivered 7.7M impressions since launch**, growing from 660k in Jan to 940k in Sep.",
+      "- Paid search impressions fell from 280k in Jul to 170k in Sep; HCP email is bought per send, so it has no impressions.",
+      "",
+      "| Channel | Impressions | Share | Clicks to site |",
+      "| --- | ---: | ---: | ---: |",
+      "| Social media | 5.7M | 73% | 37.2k |",
+      "| Paid search | 2.1M | 27% | 43.5k |",
+      "| **Total** | **7.7M** | **100%** | **80.7k** |",
+      "",
+      "Together they cost $30.49 per 1,000 impressions; paid search turns 2.1% of impressions into site visits against 0.66% for social.",
+    ),
+    suggestions: [
+      "What happened to paid search?",
+      "How much have we spent on marketing?",
+      "How is social media performing?",
+    ],
+  },
+  marketingSpend: {
+    title: "Marketing spend",
+    response: lines(
+      "- **We have spent $308.6k on marketing since launch**: $141.3k on social media, $94.4k on paid search and $72.9k on HCP email.",
+      "- Monthly spend has grown from $25.4k in Jan to $41.6k in Sep.",
+      "- Paid search spend has held at about $12k a month, but since August each click costs more.",
+      "",
+      "| Channel | Bought | Spend | Share |",
+      "| --- | --- | ---: | ---: |",
+      "| Social media | 5.7M impressions at $25.00 per 1,000 | $141.3k | 46% |",
+      "| Paid search | 43.5k clicks at $2.17 on average | $94.4k | 31% |",
+      "| HCP email | 48.6k emails at $1.50 | $72.9k | 24% |",
+      "| **Total** | | **$308.6k** | **100%** |",
+      "",
+      "Social and search cost $2.92 per site visit; all marketing works out to $47.21 per high value action.",
+    ),
+    suggestions: [
+      "What happened to paid search?",
+      "Which channels drive our impressions?",
+      "How are our HCP emails performing?",
     ],
   },
   websiteTraffic: {
     title: "Website traffic",
     response: lines(
-      "- **The brand websites have had 142.7k visits since launch**; monthly visits are up 7% on M8.",
+      "- **The brand websites have had 137.8k visits since launch**, and monthly visits are up +45% on Jan, but they peaked at 17.7k in Jul and fell to 16.6k in Sep.",
+      "- Paid search sent 2,620 fewer visits in Sep than in Jul; social, HCP email and other sources all grew.",
       "",
-      "| Site | Visits |",
-      "| --- | ---: |",
-      "| Patient site | 91.9k |",
-      "| HCP site | 50.8k |",
-      "| **Total** | **142.7k** |",
+      "| Source | Visits | Share |",
+      "| --- | ---: | ---: |",
+      "| Paid search | 43.5k | 32% |",
+      "| Social media | 37.2k | 27% |",
+      "| HCP email | 1.6k | 1% |",
+      "| Other sources | 55.5k | 40% |",
+      "| **Total** | **137.8k** | **100%** |",
+      "",
+      "Other sources are unpaid search, direct visits and referrals.",
       "",
       "| Metric | Value |",
       "| --- | ---: |",
-      "| Monthly visits, M1 | 11.5k |",
-      "| Monthly visits, M9 | 20.1k (+75%) |",
-      "| Visits with a high value action | 6.8k |",
+      "| HCP site visits | 88.4k |",
+      "| Patient site visits | 49.3k |",
+      "| Visits with a high value action | 6.5k |",
       "| HVA rate | 4.7% |",
-      "",
-      "Most high value actions are resource downloads.",
     ),
     suggestions: [
-      "How are our emails performing?",
-      "What is our ad engagement rate?",
+      "What happened to paid search?",
+      "How are our HCP emails performing?",
       "Which region is performing best?",
     ],
   },
   emailPerformance: {
-    title: "Email performance",
+    title: "HCP email performance",
     response: lines(
-      "- **67.4k emails were delivered**, with a 29.1% open rate and a 4.3% click rate.",
+      "- **46.7k HCP emails were delivered**, with a 26.0% open rate and a 3.5% click rate.",
       "",
-      "| Step | Emails | Rate |",
+      "| Step | HCP emails | Rate |",
       "| --- | ---: | ---: |",
-      "| Sent | 70.0k | |",
-      "| Bounced | 2.6k | |",
-      "| Delivered | 67.4k | |",
-      "| Opened | 19.6k | 29.1% |",
-      "| Clicked | 2.9k | 4.3% |",
-      "| Converted to a high value action | 550 | |",
+      "| Sent | 48.6k | |",
+      "| Bounced | 1.9k | |",
+      "| Delivered | 46.7k | |",
+      "| Opened | 12.1k | 26.0% |",
+      "| Clicked | 1.6k | 3.5% |",
+      "| Converted to a high value action | 240 | |",
       "",
-      "Patient campaigns open better than HCP campaigns: 36.0% vs 26.0%.",
+      "HCP email has cost $72.9k at $1.50 per email sent, or $303.75 per converted high value action. Each click is a site visit.",
     ),
     suggestions: [
       "How is website traffic trending?",
       "Which region is performing best?",
-      "Which media channels drive the most impressions?",
+      "How much have we spent on marketing?",
     ],
   },
   regionalMarketing: {
     title: "Marketing by region",
     response: lines(
-      "- **Northeast leads on most measures**, with 7.3% engagement and a 29.8% email open rate.",
-      "- Midwest is smallest and trails on HVA and open rates.",
+      "- **Northeast leads**, with the highest HCP email open rate (26.9%) and a 4.8% HVA rate.",
+      "- Midwest trails on HVA rate (4.6%) and HCP open rate (24.9%).",
       "",
-      "| Region | Impressions | Engagement | HVA rate | Open rate |",
-      "| --- | ---: | ---: | ---: | ---: |",
-      "| Northeast | 5.1M | 7.3% | 4.8% | 29.8% |",
-      "| West | 4.5M | 7.3% | 4.8% | 29.6% |",
-      "| Southeast | 4.4M | 7.0% | 4.7% | 28.3% |",
-      "| Midwest | 3.5M | 7.0% | 4.6% | 28.2% |",
-      "| **Total** | **17.4M** | **7.2%** | **4.7%** | **29.1%** |",
+      "| Region | Visits | HVA rate | HCP open rate | Search CTR | Spend |",
+      "| --- | ---: | ---: | ---: | ---: | ---: |",
+      "| Northeast | 41.6k | 4.8% | 26.9% | 2.1% | $92.2k |",
+      "| West | 35.9k | 4.8% | 26.2% | 2.1% | $79.7k |",
+      "| Southeast | 33.6k | 4.7% | 25.5% | 2.1% | $76.6k |",
+      "| Midwest | 26.6k | 4.6% | 24.9% | 2.1% | $60.0k |",
+      "| **Total** | **137.8k** | **4.7%** | **26.0%** | **2.1%** | **$308.6k** |",
     ),
     suggestions: [
-      "Which media channels drive the most impressions?",
-      "How are our emails performing?",
-      "What is our ad engagement rate?",
+      "How is website traffic trending?",
+      "How much have we spent on marketing?",
+      "How are our HCP emails performing?",
     ],
   },
   fieldReach: {
     title: "HCP reach",
     response: lines(
-      "- **126 of 150 targeted HCPs have been reached (84%)**, up from 34% in M1 as the call plan grew from 120 to 150 HCPs.",
+      "- **126 of 150 targeted HCPs have been reached (84%)**, up from 34% in Jan as the call plan grew from 120 to 150 HCPs.",
       "",
       "| Month | Targeted | Reached | Reach % |",
       "| --- | ---: | ---: | ---: |",
-      "| M1 | 120 | 41 | 34% |",
-      "| M2 | 126 | 62 | 49% |",
-      "| M3 | 132 | 78 | 59% |",
-      "| M4 | 138 | 91 | 66% |",
-      "| M5 | 142 | 101 | 71% |",
-      "| M6 | 146 | 110 | 75% |",
-      "| M7 | 148 | 117 | 79% |",
-      "| M8 | 150 | 122 | 81% |",
-      "| M9 | 150 | 126 | 84% |",
+      "| Jan | 120 | 41 | 34% |",
+      "| Feb | 126 | 62 | 49% |",
+      "| Mar | 132 | 78 | 59% |",
+      "| Apr | 138 | 91 | 66% |",
+      "| May | 142 | 101 | 71% |",
+      "| Jun | 146 | 110 | 75% |",
+      "| Jul | 148 | 117 | 79% |",
+      "| Aug | 150 | 122 | 81% |",
+      "| Sep | 150 | 126 | 84% |",
     ),
     suggestions: [
       "Which region has the best HCP reach?",
@@ -532,26 +608,26 @@ export const dashboardAnswers = {
   fieldCalls: {
     title: "Field calls",
     response: lines(
-      "- **The field team has made 872 calls since launch**, rising from 64 in M1 to 128 in M9.",
+      "- **The field team has made 872 calls since launch**, rising from 64 in Jan to 128 in Sep.",
       "",
       "| Metric | Value |",
       "| --- | ---: |",
       "| Total calls | 872 |",
       "| Avg calls per reached HCP | 6.9 |",
       "| Avg calls per selling day | 4.5 |",
-      "| Calls per selling day, M9 | 5.8 |",
+      "| Calls per selling day, Sep | 5.8 |",
       "",
       "| Month | Calls | Per day |",
       "| --- | ---: | ---: |",
-      "| M1 | 64 | 2.9 |",
-      "| M2 | 73 | 3.7 |",
-      "| M3 | 82 | 3.7 |",
-      "| M4 | 90 | 4.1 |",
-      "| M5 | 97 | 4.6 |",
-      "| M6 | 105 | 4.8 |",
-      "| M7 | 113 | 4.9 |",
-      "| M8 | 120 | 5.7 |",
-      "| M9 | 128 | 5.8 |",
+      "| Jan | 64 | 2.9 |",
+      "| Feb | 73 | 3.7 |",
+      "| Mar | 82 | 3.7 |",
+      "| Apr | 90 | 4.1 |",
+      "| May | 97 | 4.6 |",
+      "| Jun | 105 | 4.8 |",
+      "| Jul | 113 | 4.9 |",
+      "| Aug | 120 | 5.7 |",
+      "| Sep | 128 | 5.8 |",
     ),
     suggestions: [
       "What is our call type mix?",
@@ -747,39 +823,120 @@ export const dashboardAnswers = {
   trafficOutlook: {
     title: "Website traffic outlook",
     response: lines(
-      "- **Website visits are projected at 66.7k in Q4**, 18% above Q3's 56.6k, if monthly visits keep growing by about 1.1k.",
+      "- **If nothing changes, website visits are projected at 49.4k in Q4**, 4% below Q3's 51.7k, slipping by about 90 a month.",
       "",
       "| Month | Projected visits |",
       "| --- | ---: |",
-      "| Oct | 21.2k |",
-      "| Nov | 22.2k |",
-      "| Dec | 23.3k |",
-      "| **Q4** | **66.7k** |",
+      "| Oct | 16.6k |",
+      "| Nov | 16.5k |",
+      "| Dec | 16.4k |",
+      "| **Q4** | **49.4k** |",
       "",
-      "At today's 4.7% HVA rate, that is about 3.1k high value actions.",
+      "At today's 4.7% HVA rate, that is about 2.3k high value actions. Winning back paid search would add about 2,620 visits a month.",
       "",
       "Method: straight-line trend of the last three months (Jun → Sep). A demo estimate, not a forecast.",
     ),
     suggestions: [
-      "Where should we focus marketing next?",
+      "How do we win back paid search?",
+      "Why did website visits drop in September?",
       "How is website traffic trending?",
-      "How are our emails performing?",
+    ],
+  },
+  visitsDrop: {
+    title: "Why website visits dropped",
+    response: lines(
+      "- **Visits fell 6% from Jul to Sep (17.7k → 16.6k), and paid search explains all of it**",
+      "  - Paid search sent 2,620 fewer visits (6,020 → 3,400, -44%)",
+      "  - Social (+600), HCP email (+27) and other sources (+933) all grew",
+      "",
+      "| Source | Jul | Sep | Change |",
+      "| --- | ---: | ---: | ---: |",
+      "| Paid search | 6,020 | 3,400 | -2,620 |",
+      "| Social media | 4,600 | 5,200 | +600 |",
+      "| HCP email | 202 | 229 | +27 |",
+      "| Other sources | 6,878 | 7,811 | +933 |",
+      "| **Total** | **17,700** | **16,640** | **-1,060** |",
+      "",
+      "> Look at paid search next: its clicks fell while every other source grew.",
+    ),
+    suggestions: [],
+  },
+  searchDrop: {
+    title: "What happened to paid search",
+    response: lines(
+      "- **Our search budget now buys far less: cost per click is up 77% since Jul**",
+      "  - Cost per click: $2.00 → $3.55",
+      "  - Impressions: 280k → 170k (-39%)",
+      "  - Clicks: 6,020 → 3,400 (-44%)",
+      "- **Spend held at about $12k a month**, so the cap, not the ads, now limits reach",
+      "- Rising cost per click at flat spend from mid-August is the pattern of a competitor bidding on the same branded and condition terms",
+      "",
+      "| Month | Impressions | Clicks | Cost per click | Spend |",
+      "| --- | ---: | ---: | ---: | ---: |",
+      "| Jul | 280k | 6,020 | $2.00 | $12.0k |",
+      "| Aug | 240k | 4,900 | $2.45 | $12.0k |",
+      "| Sep | 170k | 3,400 | $3.55 | $12.1k |",
+      "",
+      "> Check the auction insights report to confirm who is bidding against us.",
+    ),
+    suggestions: ["What if paid search clicks go back to 6,020?"],
+  },
+  searchCost: {
+    title: "Cost of the paid search drop",
+    response: lines(
+      "- **Since Jul the drop has cost about 3,740 site visits, 176 high value actions and 11 rep requests**",
+      "  - At September's pace it loses about 2,620 visits a month",
+      "- **Winning it back costs about $9.3k more a month** at today's $3.55 per click: monthly spend goes from $41.6k to $50.9k, or $55.8k more over the next six months",
+      "",
+      "| Lost since Jul | Count |",
+      "| --- | ---: |",
+      "| Site visits | 3,740 |",
+      "| High value actions | 176 |",
+      "| Rep requests | 11 |",
+      "",
+      "> Try it in the What-If Simulator: what if paid search clicks go back to 6,020?",
+    ),
+    suggestions: [
+      "What if paid search clicks go back to 6,020?",
+      "What will website traffic be next quarter?",
+    ],
+  },
+  searchActions: {
+    title: "Winning back paid search",
+    response: lines(
+      "- **Raise the search budget by about $9.3k a month to buy back the 2,620 lost visits at today's $3.55 per click**",
+      "  - Even at $3.55, a search visit costs less than one from social ($3.80)",
+      "- **Defend our branded terms** to bring cost per click back toward $2.00: the same $12.1k would then buy 6,035 clicks",
+      "",
+      "| Action | Evidence | Expected effect |",
+      "| --- | --- | --- |",
+      "| Lift the search cap by $9.3k a month | 2,620 fewer clicks a month at $3.55 | Back to Jul's 6,020 clicks |",
+      "| Bid on branded terms and improve ad relevance | Cost per click $2.00 → $3.55 | Lower cost per click |",
+      "| Fund it from social if the budget is fixed | Social costs $3.80 per visit | Same spend, slightly more visits |",
+      "| Lean on HCP email while search recovers | Each +1 pt of click rate ≈ 467 site visits | Covers part of the gap |",
+      "",
+      "> See what it does to spend: what if paid search clicks go back to 6,020?",
+    ),
+    suggestions: [
+      "What if paid search clicks go back to 6,020?",
+      "What will website traffic be next quarter?",
+      "Where should we focus marketing next?",
     ],
   },
   marketingActions: {
     title: "Marketing priorities",
     response: lines(
-      "- **Lift HCP email engagement first**: HCP emails open at 26.0% against 36.0% for patients, and convert a third as often (0.5% vs 1.5%).",
+      "- **Win back paid search first**: clicks fell 44% since Jul as cost per click rose to $3.55, costing about 176 high value actions so far.",
       "",
       "| Priority | Evidence | Expected effect |",
       "| --- | --- | --- |",
-      "| Test HCP subject lines and send times | HCP open rate 26.0% vs patient 36.0% | Each +1 pt ≈ 467 more HCP opens |",
-      "| Shift email volume toward patient campaigns | Patient emails convert 1.5% vs HCP 0.5% | More HVAs per email sent |",
-      "| Close the Midwest gap | HVA rate 4.6% and open rate 28.2%, lowest of the four regions | Bring to national 4.7% and 29.1% |",
+      "| Win back paid search | 2,620 fewer search visits a month than in Jul | About $9.3k a month restores Jul's clicks |",
+      "| Test HCP subject lines and send times | HCP open rate 26.0% | Each +1 pt ≈ 467 more HCP opens |",
+      "| Close the Midwest gap | HVA rate 4.6% and HCP open rate 24.9%, lowest of the four regions | Bring to national 4.7% and 26.0% |",
     ),
     suggestions: [
+      "How do we win back paid search?",
       "What will website traffic be next quarter?",
-      "How are our emails performing?",
       "Which region is performing best?",
     ],
   },
@@ -964,33 +1121,34 @@ export const dashboardAnswers = {
   mediaOutlook: {
     title: "Media outlook",
     response: lines(
-      "- **Paid media is projected to deliver about 7.8M impressions in Q4**, 15% more than Q3's 6.8M, with engagement rising to about 8.5% by December.",
+      "- **Social and paid search are projected to deliver about 2.8M impressions in Q4**, 2% less than Q3's 2.9M, and about 22.7k site visits as search keeps losing clicks.",
       "",
-      "| Month | Impressions | Engagement rate |",
+      "| Month | Impressions | Site visits |",
       "| --- | ---: | ---: |",
-      "| Oct | 2.5M | 8.1% |",
-      "| Nov | 2.6M | 8.3% |",
-      "| Dec | 2.7M | 8.5% |",
+      "| Oct | 940.0k | 8.1k |",
+      "| Nov | 940.0k | 7.6k |",
+      "| Dec | 940.0k | 7.1k |",
+      "| **Q4** | **2.8M** | **22.7k** |",
       "",
-      "Method: straight-line trend of the last three months (Jun → Sep). A demo estimate, not a forecast.",
+      "Method: straight-line trend of the last three months (Jun → Sep) at today's 0.9% click-through rate. A demo estimate, not a forecast.",
     ),
     suggestions: [
-      "Where should we focus marketing next?",
-      "Which media channels drive the most impressions?",
-      "What is our ad engagement rate?",
+      "What happened to paid search?",
+      "How do we win back paid search?",
+      "How much have we spent on marketing?",
     ],
   },
   hvaActions: {
     title: "Website to rep requests",
     response: lines(
-      "- **Only 410 of 6.8k high value actions (6%) are rep requests**, about 8.1 for every 1,000 HCP site visits.",
+      "- **Only 396 of 6.5k high value actions (6%) are rep requests**, about 4.5 for every 1,000 HCP site visits.",
       "- Most HCP visitors download a resource and leave.",
       "",
       "| Action | Evidence | Expected effect |",
       "| --- | --- | --- |",
-      "| Add a request-a-rep prompt to resource downloads | 6.2k downloads vs 410 rep requests | More downloads become rep conversations |",
-      "| Route rep requests to the field team within a day | 410 requests since launch | Faster first calls with interested HCPs |",
-      "| Retarget HCP site visitors who downloaded | 50.8k HCP site visits | More return visits from engaged HCPs |",
+      "| Add a request-a-rep prompt to resource downloads | 6.0k downloads vs 396 rep requests | More downloads become rep conversations |",
+      "| Route rep requests to the field team within a day | 396 requests since launch | Faster first calls with interested HCPs |",
+      "| Retarget HCP site visitors who downloaded | 88.4k HCP site visits | More return visits from engaged HCPs |",
     ),
     suggestions: [
       "What will website traffic be next quarter?",
@@ -1122,7 +1280,7 @@ export const dashboardAnswers = {
     ],
   },
   unrecognized: {
-    title: "Dashboard Assistant",
+    title: "Clara",
     response: "I'm still learning! Please try one of the suggested questions.",
     suggestions: [
       "How are we tracking against forecast?",
@@ -1152,8 +1310,14 @@ const topicPanels: Record<Topic, readonly PanelLabel[] | null> = {
   payerMix: ["Market Access"],
   stops: ["Market Access"],
   inventory: ["Market Access"],
-  mediaChannels: ["Marketing"],
-  adEngagement: ["Marketing"],
+  socialMedia: ["Marketing"],
+  paidSearch: ["Marketing"],
+  mediaImpressions: ["Marketing"],
+  visitsDrop: ["Marketing"],
+  searchDrop: ["Marketing"],
+  searchCost: ["Marketing"],
+  searchActions: ["Marketing"],
+  marketingSpend: ["Marketing"],
   websiteTraffic: ["Marketing"],
   emailPerformance: ["Marketing"],
   regionalMarketing: ["Marketing"],
@@ -1197,6 +1361,15 @@ function topicFor(question: string): Topic {
       return "paDenialActions";
     return "paDenials";
   }
+  // Paid search story: the visit drop, its cause, what it costs and how to win it back.
+  if (/search|\bppc\b|\bcpc\b/.test(normalized) && !/how is|perform/.test(normalized)) {
+    if (/win back|recover|defend|how do we|how can we|should|fix/.test(normalized))
+      return "searchActions";
+    if (/costing|cost us|impact|losing|\blost\b/.test(normalized)) return "searchCost";
+    if (/happen|drop|fall|fell|declin|competitor|why/.test(normalized)) return "searchDrop";
+  }
+  if (/visit|traffic/.test(normalized) && /drop|fall|fell|declin|\bwhy\b/.test(normalized))
+    return "visitsDrop";
   // Prescriptive ("should", "how can we") and predictive ("will", "next quarter") questions
   // come first, so their subject words don't route them to a descriptive answer.
   if (
@@ -1236,8 +1409,11 @@ function topicFor(question: string): Topic {
     return "fieldCallMix";
   if (/\bcalls?\b|field|selling day/.test(normalized)) return "fieldCalls";
   if (/\breach|targeted|target hcp/.test(normalized)) return "fieldReach";
-  if (/impression|media/.test(normalized)) return "mediaChannels";
-  if (/engagement|ad click|video view/.test(normalized)) return "adEngagement";
+  if (/\bspen[dt]|marketing cost/.test(normalized)) return "marketingSpend";
+  if (/social|engagement|video view/.test(normalized)) return "socialMedia";
+  if (/search|\bppc\b|\bcpc\b|cost per click/.test(normalized)) return "paidSearch";
+  if (/impression|media|channel/.test(normalized) && !/inventory/.test(normalized))
+    return "mediaImpressions";
   if (/website|traffic|visit|\bhva\b|high value/.test(normalized)) return "websiteTraffic";
   if (/email|open rate|click rate/.test(normalized)) return "emailPerformance";
   if (/region/.test(normalized)) return "regionalMarketing";
@@ -1270,9 +1446,14 @@ const forwardFollowUps: Partial<Record<Topic, ForwardTopic[]>> = {
   payerMix: ["supplyOutlook", "freeToPaidActions"],
   stops: ["timeOutlook", "stopActions"],
   inventory: ["inventoryRisk", "timeToDoseActions"],
-  mediaChannels: ["mediaOutlook", "marketingActions"],
-  adEngagement: ["mediaOutlook", "marketingActions"],
-  websiteTraffic: ["trafficOutlook", "hvaActions"],
+  socialMedia: ["mediaOutlook", "marketingActions"],
+  paidSearch: ["searchDrop", "searchCost", "searchActions"],
+  mediaImpressions: ["searchDrop", "mediaOutlook"],
+  marketingSpend: ["searchDrop", "searchCost"],
+  websiteTraffic: ["visitsDrop", "trafficOutlook", "hvaActions"],
+  visitsDrop: ["searchDrop", "searchCost", "searchActions"],
+  searchDrop: ["searchCost", "searchActions"],
+  searchCost: ["searchActions"],
   emailPerformance: ["trafficOutlook", "marketingActions"],
   regionalMarketing: ["trafficOutlook", "marketingActions"],
   fieldReach: ["reachOutlook", "fieldActions"],

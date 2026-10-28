@@ -32,6 +32,7 @@ import {
   SeriesLegend,
   StackedMonthlyBars,
   StatCard,
+  ViewToggle,
 } from "@/components/dashboard/primitives";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import { callTypes, withFieldRates } from "@/lib/field-data";
@@ -142,7 +143,7 @@ export function FieldPanel() {
             text:
               k.firstMonth === trendMonths.at(-1)?.month
                 ? `${k.latestCalls} in ${k.firstMonth}`
-                : `${k.latestCalls} in M9, up from ${k.firstCalls} in ${k.firstMonth}`,
+                : `${k.latestCalls} in Sep, up from ${k.firstCalls} in ${k.firstMonth}`,
             direction: "up",
           }}
           trend={{ values: shapeTrend(column("total"), "sum", view), label: `Calls ${by}` }}
@@ -163,7 +164,7 @@ export function FieldPanel() {
           Icon={CalendarDays}
           value={k.callsPerDay.toFixed(1)}
           detail={`Field team, over ${k.sellingDays} selling days`}
-          comparison={{ text: `${k.latestCallsPerDay.toFixed(1)} a day in M9`, direction: "up" }}
+          comparison={{ text: `${k.latestCallsPerDay.toFixed(1)} a day in Sep`, direction: "up" }}
           trend={{
             values: shapeRate(column("total"), column("sellingDays"), view),
             label: `Calls per day ${by}`,
@@ -224,26 +225,15 @@ export function FieldPanel() {
 
         <DashboardPanel
           title="Call Type by Month"
-          subtitle="Field calls by type · M1 = Jan 2026"
+          subtitle="Field calls by type · Jan–Sep 2026"
           className="col-span-12 lg:col-span-6"
           action={
-            <div
-              className="flex shrink-0 rounded-md border border-border p-0.5"
-              role="group"
-              aria-label="Call type"
-            >
-              {([{ key: "all", label: "All" }, ...callTypes] as const).map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  aria-pressed={callFilter === item.key}
-                  onClick={() => setCallFilter(item.key)}
-                  className={`rounded px-2 py-1 text-[11px] font-medium transition-colors ${callFilter === item.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
+            <ViewToggle
+              label="Call type"
+              options={[{ key: "all", label: "All" }, ...callTypes]}
+              value={callFilter}
+              onChange={setCallFilter}
+            />
           }
         >
           <StackedMonthlyBars data={callRows} series={shownSeries} />

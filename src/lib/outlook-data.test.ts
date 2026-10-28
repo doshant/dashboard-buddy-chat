@@ -8,7 +8,9 @@ import {
 } from "@/lib/dashboard-data";
 import {
   fieldActions,
+  hvaActions,
   marketingActions,
+  mediaOutlook,
   monthsToCloseGapWithFirstAction,
   projectAhead,
   reachOutlook,
@@ -17,6 +19,7 @@ import {
   salesOutlook,
   supplyOutlook,
   timeToDoseActions,
+  searchStory,
   trafficOutlook,
 } from "@/lib/outlook-data";
 import { formatCount } from "@/lib/marketing-data";
@@ -59,7 +62,7 @@ describe("Predictive and prescriptive questions", () => {
       return resolveDashboardAnswer(question).title;
     });
     expect(new Set(titles).size).toBe(forwardQuestionList.length);
-    expect(titles).not.toContain("Dashboard Assistant");
+    expect(titles).not.toContain("Clara");
     expect(titles).toEqual(
       expect.arrayContaining(["Net sales outlook", "Inventory risk", "Growing repeat prescribers"]),
     );
@@ -83,6 +86,22 @@ describe("Predictive and prescriptive questions", () => {
     const traffic = answer("What will website traffic be next quarter?");
     expect(traffic).toContain(`${formatCount(trafficOutlook.q4Visits)} in Q4`);
     for (const row of trafficOutlook.months) expect(traffic).toContain(formatCount(row.visits));
+
+    const media = answer("How many impressions will we deliver next quarter?");
+    expect(media).toContain(`about ${formatCount(mediaOutlook.q4ImpressionsK * 1000)} impressions`);
+    expect(media).toContain(`Q3's ${formatCount(mediaOutlook.q3ImpressionsK * 1000)}`);
+    expect(media).toContain(`about ${formatCount(mediaOutlook.q4Clicks)} site visits`);
+    expect(media).toContain(`today's ${mediaOutlook.latestCtr}% click-through rate`);
+    for (const row of mediaOutlook.months) {
+      expect(media).toContain(
+        `| ${row.month} | ${formatCount(row.impressionsK * 1000)} | ${formatCount(row.clicks)} |`,
+      );
+    }
+
+    const hva = answer("How do we turn website visits into rep requests?");
+    expect(hva).toContain(`Only ${hvaActions.repRequests} of`);
+    expect(hva).toContain(`(${hvaActions.repRequestSharePct}%) are rep requests`);
+    expect(hva).toContain(`about ${hvaActions.repRequestsPer1kHcpVisits} for every 1,000`);
 
     const reach = answer("How many HCPs will we reach by year end?");
     expect(reach).toContain(
@@ -110,6 +129,7 @@ describe("Predictive and prescriptive questions", () => {
     expect(marketing).toContain(`${marketingActions.hcpOpenRate.toFixed(1)}%`);
     expect(marketing).toContain(`${marketingActions.hcpOpensPerPoint} more HCP opens`);
     expect(marketing).toContain(`Close the ${marketingActions.weakestRegion} gap`);
+    expect(marketing).toContain(`about ${searchStory.lostHvas} high value actions`);
 
     const field = answer("Which HCPs should the field team prioritize?");
     expect(field).toContain(`${fieldActions.unreached} targeted HCPs not yet reached`);
@@ -123,8 +143,9 @@ describe("Predictive and prescriptive questions", () => {
 
   it("only offers forward-looking follow-ups the profile can open", () => {
     for (const profile of profiles) {
-      for (const panel of profile.panels) {
-        for (const question of starterQuestionsFor(panel)) {
+      // What-if questions are answered by the simulator, which has its own tests.
+      for (const panel of profile.panels.filter((item) => item !== "What-If Simulator")) {
+        for (const question of starterQuestionsFor(panel, profile.panels)) {
           const { suggestions } = resolveDashboardAnswer(question, profile.panels);
           expect(
             suggestions.some((item) => questionKind(item) !== "Descriptive"),
@@ -163,7 +184,7 @@ describe("Signals flagged when the assistant opens", () => {
         for (const signal of attentionSignalsFor(panel, profile.panels)) {
           const { title, response } = resolveDashboardAnswer(signal.question, profile.panels);
           expect(response).not.toContain("isn't part of your access");
-          expect(title).not.toBe("Dashboard Assistant");
+          expect(title).not.toBe("Clara");
           expect(questionKind(signal.question)).not.toBe("Descriptive");
         }
       }

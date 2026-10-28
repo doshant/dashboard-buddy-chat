@@ -16,12 +16,20 @@ import {
   salesActionsTotal,
   salesMilestone,
   salesOutlook,
+  searchStory,
   stopActions,
   supplyOutlook,
   timeOutlook,
   timeToDoseActions,
   trafficOutlook,
 } from "@/lib/outlook-data";
+import { spendRates } from "@/lib/marketing-data";
+import {
+  marketingBaseline,
+  marketingBaselineFor,
+  marketingSimulatorSummary,
+  searchWinBack,
+} from "@/lib/marketing-simulator-data";
 import { buildDashboardData } from "@/lib/scoped-data";
 import { simulatorBaseline, simulatorSummary } from "@/lib/simulator-data";
 import type { Scope } from "@/lib/scope";
@@ -37,6 +45,9 @@ const launchTabs: PanelLabel[] = ["Executive Summary", "Overview"];
 export function buildAssistantContext(scope: Scope, allowedPanels: readonly PanelLabel[]) {
   const data = buildDashboardData(scope);
   const can = (panel: PanelLabel) => allowedPanels.includes(panel);
+  // The simulator always starts from launch-to-date figures for the selected geography.
+  const launchToDate = () =>
+    buildDashboardData({ geography: scope.geography, period: "Launch to Date" });
   const canLaunch = launchTabs.some(can);
   const { launch, marketAccess, field, marketing, executive, regional } = data;
 
@@ -151,13 +162,19 @@ export function buildAssistantContext(scope: Scope, allowedPanels: readonly Pane
     ...(can("Marketing") && {
       marketing: {
         kpis: marketing.marketingKpis,
-        impressionsByMonthK: marketing.impressionsByMonth,
-        impressionsByChannelK: marketing.impressionsByChannel,
-        engagementByMonth: marketing.engagementByMonth,
+        // Spend is in dollars; impressions are in thousands (impressionsK).
+        spendRates,
+        spendByMonth: marketing.spendByMonth,
+        spendByChannel: marketing.spendByChannel,
         websiteVisitsByMonth: marketing.websiteVisitsByMonth,
+        // Each social, search and HCP email click is a site visit; "other" is every other source
+        // (unpaid search, direct visits and referrals).
+        visitsBySourceByMonth: marketing.visitsBySourceByMonth,
         highValueActions: marketing.highValueActions,
-        emailByAudience: marketing.emailByAudience,
-        emailFunnel: marketing.emailFunnel,
+        hcpEmailByMonth: marketing.emailByMonth,
+        hcpEmailFunnel: marketing.emailFunnel,
+        socialByMonth: marketing.socialByMonth,
+        paidSearchByMonth: marketing.searchByMonth,
         regionalSummary: [...regional.marketing.rows, regional.marketing.total],
       },
     }),
@@ -166,9 +183,8 @@ export function buildAssistantContext(scope: Scope, allowedPanels: readonly Pane
         kpis: field.fieldKpis,
         monthsInPeriod: field.fieldByMonth,
         monthlyTrendSinceLaunch: field.trend.fieldByMonth.map(
-          ({ month, calendar, total, targeted, reached }) => ({
+          ({ month, total, targeted, reached }) => ({
             month,
-            calendar,
             calls: total,
             targeted,
             reached,
@@ -179,13 +195,17 @@ export function buildAssistantContext(scope: Scope, allowedPanels: readonly Pane
         regionalSummary: [...regional.field.rows, regional.field.total],
       },
     }),
-    // Rule-based what-if scenarios for the selected geography, from launch-to-date figures.
+    // Rule-based what-if scenarios for the selected geography, from launch-to-date figures: one
+    // set of levers for each of the profile's Marketing and Market Access tabs.
     ...(can("What-If Simulator") && {
-      whatIfSimulator: simulatorSummary(
-        simulatorBaseline(
-          buildDashboardData({ geography: scope.geography, period: "Launch to Date" }),
-        ),
-      ),
+      whatIfSimulator: {
+        ...(can("Marketing") && {
+          marketing: marketingSimulatorSummary(marketingBaseline(launchToDate())),
+        }),
+        ...(can("Market Access") && {
+          marketAccess: simulatorSummary(simulatorBaseline(launchToDate())),
+        }),
+      },
     }),
     // Precomputed projections and recommendations (national, launch to date). Quote these rather
     // than recalculating, so live answers agree with the dashboard.
@@ -206,7 +226,17 @@ export function buildAssistantContext(scope: Scope, allowedPanels: readonly Pane
         marketAccess: { supplyOutlook, inventoryRisk, timeOutlook, timeToDoseActions, stopActions },
       }),
       ...(can("Marketing") && {
-        marketing: { trafficOutlook, mediaOutlook, marketingActions, hvaActions },
+        marketing: {
+          trafficOutlook,
+          mediaOutlook,
+          marketingActions,
+          hvaActions,
+          paidSearchStory: {
+            note: "Website visits fell from Jul to Sep only because paid search lost clicks: its cost per click rose while monthly spend held at about $12k, the pattern of a competitor bidding on our branded and condition terms from mid-August. Lost visits, HVAs and rep requests are counted against July's search clicks; extraBudgetPerMonth buys back the lost clicks at today's cost per click. winBack is the What-If Simulator's spend for buying back the peak month's search clicks (the question 'What if paid search clicks go back to 6,020?'): quote it for what winning back search costs.",
+            ...searchStory,
+            winBack: searchWinBack(marketingBaselineFor("Nation")),
+          },
+        },
       }),
       ...(can("Field Activity") && {
         field: { reachOutlook, prescriberOutlook, fieldActions, repeatActions },
