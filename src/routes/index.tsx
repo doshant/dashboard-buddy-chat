@@ -44,6 +44,7 @@ import { InputGroupAddon } from "@/components/ui/input-group";
 import { ChatSuggestion } from "@/components/chat-suggestion";
 import { ChatTableCell, ResizableHeaderCell } from "@/components/chat-table";
 import { DashboardDataProvider } from "@/components/dashboard/dashboard-data-context";
+import { InsightsPanel } from "@/components/dashboard/insights-panel";
 import { ExecutivePanel } from "@/components/dashboard/executive-panel";
 import { FieldPanel } from "@/components/dashboard/field-panel";
 import {
@@ -82,7 +83,7 @@ import {
   starterQuestionsFor,
   type PanelLabel,
 } from "@/lib/dashboard-data";
-import { attentionSignalsFor } from "@/lib/outlook-data";
+import { insightsFor } from "@/lib/insights-data";
 import { buildDashboardData } from "@/lib/scoped-data";
 import { whatIfFor, type SimulatorLevers } from "@/lib/simulator-data";
 import {
@@ -377,7 +378,12 @@ function LaunchTracker() {
   const PanelIcon = panel.icon;
   const panelFilters = panel.filters ?? { geography: true, period: true };
   const starterQuestions = starterQuestionsFor(panel.label, profile.panels, scenario);
-  const attentionSignals = attentionSignalsFor(panel.label, profile.panels);
+  // Persona insights for this tab; Clara flags the same signals, each with its first question.
+  const insights = insightsFor(profile.id, panel.label);
+  const attentionSignals = insights.map((insight) => ({
+    question: insight.questions[0]!,
+    reason: insight.signal,
+  }));
   const isRestricted = visiblePanels.length < shownPanels.length;
 
   function switchProfile(id: string) {
@@ -645,6 +651,17 @@ function LaunchTracker() {
             <ProfileSwitcher activeId={profile.id} onSwitch={switchProfile} />
           </div>
         </header>
+
+        <InsightsPanel
+          key={`${profile.id}-${panel.label}`}
+          name={profile.name}
+          role={profile.role}
+          insights={insights}
+          onAsk={(question) => {
+            openChat();
+            sendQuestion(question);
+          }}
+        />
 
         {panel.Content ? (
           <DashboardDataProvider value={dashboardData}>
