@@ -189,7 +189,7 @@ export function marketingPresets(baseline: MarketingBaseline) {
       label: "Social +20%",
       levers: {
         ...base,
-        socialImpressionsK: Math.round((base.socialImpressionsK * 1.2) / 10) * 10,
+        socialImpressionsK: Math.round(base.socialImpressionsK * 1.2),
       },
     },
     {
@@ -340,18 +340,12 @@ export function parseMarketingWhatIf(question: string, baseline: MarketingBaseli
   const levers: MarketingLevers = { ...base };
   for (const key of Object.keys(requested) as LeverKey[]) {
     const asked = requested[key]!;
-    const rounded =
-      key === "socialImpressionsK"
-        ? Math.round(asked / 10) * 10
-        : key === "searchClicks"
-          ? Math.round(asked)
-          : round1(asked);
+    // Volumes to whole units (impressions in thousands), rates to one decimal, as the sliders.
+    const rounded = key === "emailClickRatePct" ? round1(asked) : Math.round(asked);
     levers[key] = Math.min(ranges[key].max, Math.max(ranges[key].min, rounded));
   }
   const capped = (Object.keys(requested) as LeverKey[]).filter(
-    (key) =>
-      Math.abs(requested[key]! - levers[key]) >
-      (key === "socialImpressionsK" ? 5 : key === "searchClicks" ? 1 : 0.05),
+    (key) => Math.abs(requested[key]! - levers[key]) > (key === "emailClickRatePct" ? 0.05 : 0.5),
   );
   return { levers, requested: Object.keys(requested) as LeverKey[], capped };
 }

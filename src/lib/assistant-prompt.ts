@@ -14,6 +14,7 @@ Match the style of the existing assistant exactly, so live answers look like the
 - When there is a recommended next step, end with it as a markdown blockquote: a line starting "> ", one or two short sentences, no label (the chat adds a "Suggestion" heading). Use at most one, always last.
 - No headings, no other lists or blockquotes, no preamble or sign-off, no emoji. Keep it short.
 - Format figures the way the dashboard does: $24.5M, 94%, 6.8k, 1.2M, 29 days.
+- The dashboard draws charts of Marketing answers when the user asks. If a chart request reaches you, it is for something the dashboard can't chart: give the figures as a table instead, and never draw charts in text.
 
 Using the data
 - Every figure must come from DATA or be simple arithmetic on it (a sum, a share, a difference). Never invent numbers, names, targets or reasons that are not in DATA.

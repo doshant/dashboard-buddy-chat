@@ -275,7 +275,7 @@ function MarketingSimulator({ baseline, where }: { baseline: MarketingBaseline; 
             rule="Costs $25.00 per 1,000 impressions; about 0.7% click through to the site"
             range={ranges.socialImpressionsK}
             formatBound={impressions}
-            step={10}
+            step={1}
             onChange={(value) => set({ socialImpressionsK: value })}
           />
           <Lever
@@ -288,7 +288,7 @@ function MarketingSimulator({ baseline, where }: { baseline: MarketingBaseline; 
             rule={`Costs $${baseline.searchCpc.toFixed(2)} per click (${month}'s rate); each click is a site visit`}
             range={ranges.searchClicks}
             formatBound={(value) => value.toLocaleString("en-US")}
-            step={10}
+            step={1}
             onChange={(value) => set({ searchClicks: value })}
           />
           <Lever
@@ -410,7 +410,7 @@ function AccessSimulator({ baseline, where }: { baseline: SimulatorBaseline; whe
             baseline={`$${base.oopPerDose} patient cost per paid dose today`}
             rule={`Every 10% lower: +${simulatorRules.oopElasticity * 10}% new paid patients. The cut is paid as copay support.`}
             range={ranges.oopPerDose}
-            step={5}
+            step={1}
             onChange={(value) => setLevers({ ...levers, oopPerDose: value })}
           />
         </>

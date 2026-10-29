@@ -96,7 +96,7 @@ describe("What-If Simulator", () => {
 
   it("reads what-if questions into slider values, from today's values", () => {
     const levers = (question: string) => parseWhatIf(question, nation)?.levers;
-    expect(levers("What if out-of-pocket cost is 20% lower?")).toMatchObject({ oopPerDose: 235 });
+    expect(levers("What if out-of-pocket cost is 20% lower?")).toMatchObject({ oopPerDose: 236 });
     expect(levers("What if we reduce OOP by $50?")).toMatchObject({ oopPerDose: 245 });
     expect(levers("What if copay drops to $200?")).toMatchObject({ oopPerDose: 200 });
     expect(levers("What if PA approval is 5 days faster?")).toMatchObject({
@@ -118,7 +118,7 @@ describe("What-If Simulator", () => {
       referralToPaidPct: 54,
       paDays: 12,
       firstDoseDays: 26,
-      oopPerDose: 265,
+      oopPerDose: 266,
     });
   });
 

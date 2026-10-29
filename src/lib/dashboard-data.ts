@@ -1359,6 +1359,11 @@ const topicPanels: Record<Topic, readonly PanelLabel[] | null> = {
   unrecognized: null,
 };
 
+// The topic a question is answered from, so other modules (such as the chat charts) can follow it.
+export function answerTopicFor(question: string): string {
+  return topicFor(question);
+}
+
 function topicFor(question: string): Topic {
   const normalized = question.toLowerCase().trim();
 

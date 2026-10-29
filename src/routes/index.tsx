@@ -34,6 +34,7 @@ import {
   X,
 } from "lucide-react";
 import { Conversation, ConversationContent } from "@/components/ai-elements/conversation";
+import { useStickToBottomContext } from "use-stick-to-bottom";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import {
   PromptInput,
@@ -41,6 +42,7 @@ import {
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input";
 import { InputGroupAddon } from "@/components/ui/input-group";
+import { ChatChart } from "@/components/chat-chart";
 import { ChatSuggestion } from "@/components/chat-suggestion";
 import { ChatTableCell, ResizableHeaderCell } from "@/components/chat-table";
 import { DashboardDataProvider } from "@/components/dashboard/dashboard-data-context";
@@ -76,13 +78,16 @@ import {
 } from "@/components/ui/select";
 import {
   accessSummary,
+  canAsk,
   dataThrough,
   filters,
+  panelLabels,
   profiles,
   resolveDashboardAnswer,
   starterQuestionsFor,
   type PanelLabel,
 } from "@/lib/dashboard-data";
+import { chartFollowUp, chatChartFor, isChartRequest, type ChatChartSpec } from "@/lib/chat-charts";
 import { insightsFor } from "@/lib/insights-data";
 import { buildDashboardData } from "@/lib/scoped-data";
 import { whatIfFor, type SimulatorLevers } from "@/lib/simulator-data";
@@ -123,6 +128,10 @@ type ChatMessage = {
   text: string;
   title?: string;
   suggestions?: string[];
+  // A chart of this answer's figures, drawn when the user asks to chart it.
+  chartable?: ChatChartSpec | null;
+  // A chart shown in this reply.
+  chart?: ChatChartSpec;
   // Assistant answers come from Claude; "preset" marks the offline fallback answer.
   source?: "claude" | "preset";
   // Set when a live answer was expected but failed, so the preset answer is labelled.
@@ -226,9 +235,13 @@ function LaunchTracker() {
   const [simulatorLevers, setSimulatorLevers] = useState<SimulatorLevers | null>(null);
   const [marketingLevers, setMarketingLevers] = useState<MarketingLevers | null>(null);
   const [chosenScenario, setScenario] = useState<SimulatorScenario>("Marketing");
+  // Each profile gets the levers for its own tabs; only full access (the brand lead) also sees the
+  // preview scenarios that show the feature's wider scope.
   const scenarios = useMemo<SimulatorScenario[]>(() => {
     const allowed = profiles.find((item) => item.id === profileId)?.panels ?? [];
-    return [...simulatorScenarios.filter((item) => allowed.includes(item)), ...previewScenarios];
+    const live = simulatorScenarios.filter((item) => allowed.includes(item));
+    const fullAccess = panelLabels.every((label) => allowed.includes(label));
+    return fullAccess ? [...live, ...previewScenarios] : live;
   }, [profileId]);
   const scenario = scenarios.includes(chosenScenario)
     ? chosenScenario
@@ -488,8 +501,41 @@ function LaunchTracker() {
     );
   }
 
+  // "Show this as a chart" and similar follow-ups chart the question's own topic or, failing
+  // that, the latest answer that has figures to chart. Returns false if there's nothing to chart.
+  function sendChartReply(question: string) {
+    const ownTopic = chatChartFor(question);
+    const permitted = ownTopic && canAsk(question, profile.panels) ? ownTopic : null;
+    const previous = [...messages]
+      .reverse()
+      .find((item) => item.role === "assistant" && item.chartable);
+    const chart = permitted ?? previous?.chartable;
+    if (!chart) return false;
+    const id = Date.now();
+    const replyId = id + 1;
+    const text = `Here's **${chart.title.toLowerCase()}**, from the figures above. Hover the chart for exact values.`;
+    setMessages((current) => [
+      ...current,
+      { id, role: "user", text: question },
+      {
+        id: replyId,
+        role: "assistant",
+        text: "",
+        title: chart.title,
+        chart,
+        suggestions: (previous?.suggestions ?? []).filter((item) => item !== chartFollowUp),
+      },
+    ]);
+    setReply({ id: replyId, shown: 0 });
+    replyText.current = { id: replyId, text: "", complete: false };
+    replyTimer.current = setTimeout(() => typeReply(replyId, 0), replyThinkingMs);
+    showPresetAnswer(replyId, text, false);
+    return true;
+  }
+
   function sendQuestion(question: string) {
     finishReply();
+    if (isChartRequest(question) && sendChartReply(question)) return;
     // A what-if question sets the simulator's sliders and is answered from the same model, so the
     // reply always matches the tab. It uses the levers of the profile's own tabs.
     const can = (label: PanelLabel) =>
@@ -505,6 +551,9 @@ function LaunchTracker() {
     // The preset answer supplies the download title and follow-up suggestions, and is the
     // fallback text when no live answer is available.
     const preset = whatIf?.answer ?? resolveDashboardAnswer(question, profile.panels);
+    // Marketing answers with figures to chart offer "Show this as a chart" as a follow-up.
+    const chartable =
+      whatIf || preset.title === "Access restricted" ? null : chatChartFor(question);
     const id = Date.now();
     const replyId = id + 1;
     const earlier = messages
@@ -522,7 +571,8 @@ function LaunchTracker() {
         role: "assistant",
         text: "",
         title: preset.title,
-        suggestions: preset.suggestions,
+        suggestions: chartable ? [...preset.suggestions, chartFollowUp] : preset.suggestions,
+        chartable,
       },
     ]);
     setReply({ id: replyId, shown: 0 });
@@ -799,7 +849,12 @@ function LaunchTracker() {
               {messages.map((message) => {
                 const revealing = reply?.id === message.id ? reply : null;
                 return (
-                  <Message key={message.id} from={message.role} className="max-w-full gap-1.5">
+                  <Message
+                    key={message.id}
+                    from={message.role}
+                    data-message-id={message.id}
+                    className="max-w-full gap-1.5"
+                  >
                     <MessageContent
                       className={
                         message.role === "user"
@@ -821,6 +876,7 @@ function LaunchTracker() {
                         </MessageResponse>
                       )}
                     </MessageContent>
+                    {message.chart && !revealing && <ChatChart chart={message.chart} />}
                     {message.fallback && !revealing && (
                       <p className="text-[10px] text-muted-foreground">
                         Preset answer · live answers are unavailable right now
@@ -840,6 +896,9 @@ function LaunchTracker() {
                 );
               })}
             </ConversationContent>
+            <ScrollToQuestion
+              id={[...messages].reverse().find((item) => item.role === "user")?.id ?? null}
+            />
           </Conversation>
 
           {messages.length === 0 && (
@@ -998,6 +1057,30 @@ function ProfileSwitcher({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+// Brings the question just asked to the top of the chat, with the answer typing out below it,
+// even if the reader had scrolled up to click an earlier suggestion.
+function ScrollToQuestion({ id }: { id: number | null }) {
+  const { scrollRef, stopScroll } = useStickToBottomContext();
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (id === null || !scroller) return;
+    const frame = requestAnimationFrame(() => {
+      const question = scroller.querySelector(`[data-message-id="${id}"]`);
+      if (!question) return;
+      // Stop following the bottom, so the question stays in view while the answer grows.
+      stopScroll();
+      const top =
+        question.getBoundingClientRect().top -
+        scroller.getBoundingClientRect().top +
+        scroller.scrollTop -
+        12;
+      scroller.scrollTo({ top, behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [id, scrollRef, stopScroll]);
+  return null;
 }
 
 function AssistantMessage({ text }: { text: string }) {

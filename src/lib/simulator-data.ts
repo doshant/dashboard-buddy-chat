@@ -182,7 +182,7 @@ export function simulatorPresets(baseline: SimulatorBaseline) {
     },
     {
       label: "Out-of-pocket 20% lower",
-      levers: { ...base, oopPerDose: Math.round((base.oopPerDose * 0.8) / 5) * 5 },
+      levers: { ...base, oopPerDose: Math.round(base.oopPerDose * 0.8) },
     },
     {
       label: "Referral → Paid +10%",
@@ -202,7 +202,7 @@ export function simulatorSummary(baseline: SimulatorBaseline) {
       label: "Out-of-pocket 10% lower",
       levers: {
         ...baseline.levers,
-        oopPerDose: Math.round((baseline.levers.oopPerDose * 0.9) / 5) * 5,
+        oopPerDose: Math.round(baseline.levers.oopPerDose * 0.9),
       },
     },
   ];
@@ -309,7 +309,7 @@ export function parseWhatIf(question: string, baseline: SimulatorBaseline) {
   if (Object.keys(requested).length === 0) return null;
 
   const clamp = (key: LeverKey, value: number) => {
-    const rounded = key === "oopPerDose" ? Math.round(value / 5) * 5 : Math.round(value);
+    const rounded = Math.round(value);
     return Math.min(ranges[key].max, Math.max(ranges[key].min, rounded));
   };
   let levers: SimulatorLevers = { ...base };

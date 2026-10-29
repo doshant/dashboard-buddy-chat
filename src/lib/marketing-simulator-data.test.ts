@@ -86,7 +86,7 @@ describe("What-If Simulator, Marketing levers", () => {
       searchClicks: 6_020,
     });
     expect(levers("What if social impressions rise 20%?")).toMatchObject({
-      socialImpressionsK: 920,
+      socialImpressionsK: 924,
     });
     expect(levers("What if social impressions go to 1M?")).toMatchObject({
       socialImpressionsK: 1_000,
@@ -98,7 +98,7 @@ describe("What-If Simulator, Marketing levers", () => {
       emailClickRatePct: 4.5,
     });
     expect(levers("What if social impressions fall 10% and search clicks rise to 5,000?")).toEqual({
-      socialImpressionsK: 690,
+      socialImpressionsK: 693,
       searchClicks: 5_000,
       emailClickRatePct: 3.5,
     });
