@@ -24,9 +24,9 @@ const metric = (key: string) => {
   return found;
 };
 
-describe("Executive Summary", () => {
+describe("Performance Snapshot", () => {
   it("is the first tab", () => {
-    expect(panelLabels[0]).toBe("Executive Summary");
+    expect(panelLabels[0]).toBe("Performance Snapshot");
   });
 
   it("always shows fill and abandonment rates in the top row", () => {
@@ -67,8 +67,8 @@ describe("Executive Summary", () => {
     expect(executiveInsights.headline).toContain("Sales Performance needs watching");
   });
 
-  it("answers the Executive Summary starter questions", () => {
-    const questions = starterQuestionsFor("Executive Summary");
+  it("answers the Performance Snapshot starter questions", () => {
+    const questions = starterQuestionsFor("Performance Snapshot");
     expect(questions).toHaveLength(5);
     for (const question of questions) {
       expect(resolveDashboardAnswer(question).title).not.toBe("Clara");
@@ -80,7 +80,7 @@ describe("Executive Summary", () => {
   });
 });
 
-describe("Executive Summary KPIs", () => {
+describe("Performance Snapshot KPIs", () => {
   it("covers six distinct areas, each with a trend and three supporting metrics", () => {
     expect(kpiGroups.map((group) => group.title)).toEqual([
       "Sales & Demand",

@@ -24,6 +24,7 @@ import {
   vialsAdministered,
 } from "@/lib/market-access-data";
 import {
+  attributionRules,
   highValueActions,
   marketingKpis,
   paidMediaByMonth,
@@ -58,7 +59,7 @@ export function projectAhead(values: number[], months: number = projectedMonths.
 // Net sales per paid vial: WAC less gross-to-net.
 const netPerVialM = (kpis.netSales.wac * (1 - kpis.netSales.gtn)) / 1e6;
 
-// --- Sales outlook (Executive Summary) -------------------------------------------------------
+// --- Sales outlook (Performance Snapshot) -------------------------------------------------------
 const paidVialsAhead = projectAhead(monthlyVials.map((row) => row.paid));
 export const salesOutlook = {
   months: projectedMonths.map((month, i) => ({
@@ -73,7 +74,7 @@ export const salesOutlook = {
   paidVialsPerMonthStep: round1(monthlyStep(monthlyVials.map((row) => row.paid))),
 };
 
-// --- Closing the sales gap (Executive Summary) ----------------------------------------------
+// --- Closing the sales gap (Performance Snapshot) ----------------------------------------------
 // Each patient on therapy uses about this many doses a month (September doses ÷ active patients).
 const dosesPerPatientMonth = last(vialsAdministered).total / kpis.activePatients.total;
 const monthlyValueM = (patients: number) => round2(patients * dosesPerPatientMonth * netPerVialM);
@@ -210,14 +211,14 @@ export const fieldActions = {
   conversionPct: Math.round((kpis.prescribers.sinceLaunch / latestField.reached) * 100),
 };
 
-// --- Monthly net sales milestone (Executive Summary) ----------------------------------------
+// --- Monthly net sales milestone (Performance Snapshot) ----------------------------------------
 export const salesMilestone = {
   thresholdM: 5,
   month: salesOutlook.months.find((row) => row.netSalesM >= 5)?.month ?? null,
   latestM: last(monthlyVials).paid * netPerVialM,
 };
 
-// --- Active patient outlook (Executive Summary) ---------------------------------------------
+// --- Active patient outlook (Performance Snapshot) ---------------------------------------------
 const activeTotals = activePatientsTrend.map((row) => row.loading + row.maintenance);
 const activeAhead = projectAhead(activeTotals);
 export const activeOutlook = {
@@ -227,7 +228,7 @@ export const activeOutlook = {
   december: Math.round(activeAhead[activeAhead.length - 1] ?? 0),
 };
 
-// --- Free goods to paid (Executive Summary) -------------------------------------------------
+// --- Free goods to paid (Performance Snapshot) -------------------------------------------------
 // Quick Start and Bridge are temporary programs; PAP is income-based and usually stays free.
 export const freeToPaidActions = {
   programs: [
@@ -254,7 +255,7 @@ export const freeToPaidActions = {
   freeSharePct: Math.round((kpis.activePatients.free / kpis.activePatients.total) * 100),
 };
 
-// --- Patients waiting over 30 days (Executive Summary) --------------------------------------
+// --- Patients waiting over 30 days (Performance Snapshot) --------------------------------------
 const over30 = kpis.pending.over30;
 export const over30Actions = {
   patients: over30,
@@ -393,6 +394,17 @@ export const searchStory = {
   lostVisits: lostSearchVisits,
   lostHvas: Math.round((lostSearchVisits * marketingKpis.hva.rate) / 100),
   lostRepRequests: Math.round((lostSearchVisits * repRequests) / marketingKpis.website.total),
+  // Net sales the lost visits would have brought, from the channel attribution grid.
+  lostNetSales: lostSearchVisits * attributionRules.revenuePerVisit.search,
+  // Search ROI (attributed net sales per $1 of spend) in its best month and the latest month.
+  peakRoi:
+    Math.round(
+      ((searchPeak.clicks * attributionRules.revenuePerVisit.search) / searchPeak.spend) * 10,
+    ) / 10,
+  latestRoi:
+    Math.round(
+      ((searchLatest.clicks * attributionRules.revenuePerVisit.search) / searchLatest.spend) * 10,
+    ) / 10,
   // Winning it back
   clicksLostPerMonth: searchClicksLost,
   extraBudgetPerMonth: Math.round(searchClicksLost * searchLatest.cpc),
@@ -432,7 +444,7 @@ export type AttentionSignal = { panel: PanelLabel; question: string; reason: str
 const signalRules: (AttentionSignal & { active: boolean })[] = [
   // The Market Access story: first-pass PA denials. Flagged first on both tabs that show it.
   {
-    panel: "Executive Summary",
+    panel: "Performance Snapshot",
     active: paAnalysis.firstPassQ3 < paAnalysis.firstPassH1 - 10,
     question: forwardQuestion("paDenials"),
     reason: `First-pass PA approval fell from ${paAnalysis.firstPassH1}% in H1 to ${paAnalysis.firstPassQ3}% in Q3`,
@@ -444,13 +456,13 @@ const signalRules: (AttentionSignal & { active: boolean })[] = [
     reason: `First-pass PA approval fell from ${paAnalysis.firstPassH1}% in H1 to ${paAnalysis.firstPassQ3}% in Q3`,
   },
   {
-    panel: "Executive Summary",
+    panel: "Performance Snapshot",
     active: kpis.netSales.attainmentPct < 100,
     question: forwardQuestion("salesActions"),
     reason: `Net sales at ${kpis.netSales.attainmentPct}% of forecast launch to date`,
   },
   {
-    panel: "Executive Summary",
+    panel: "Performance Snapshot",
     active: over30 > 0,
     question: forwardQuestion("over30Actions"),
     reason: `${over30} patients waiting more than 30 days to start`,

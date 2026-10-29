@@ -23,6 +23,7 @@ import {
   timeToDoseActions,
   trafficOutlook,
 } from "@/lib/outlook-data";
+import { attributionRules, buildAttribution } from "@/lib/attribution-data";
 import { spendRates } from "@/lib/marketing-data";
 import {
   marketingBaseline,
@@ -38,9 +39,9 @@ import type { Scope } from "@/lib/scope";
 // limited to the tabs the user's profile can open. Forward-looking figures are national, launch to
 // date. Everything here is derived from the same modules the dashboard renders.
 
-// Tabs whose headline figures appear on the Executive Summary are answerable from it, matching the
+// Tabs whose headline figures appear on the Performance Snapshot are answerable from it, matching the
 // assistant's access rules for preset answers.
-const launchTabs: PanelLabel[] = ["Executive Summary", "Overview"];
+const launchTabs: PanelLabel[] = ["Performance Snapshot", "Overview"];
 
 export function buildAssistantContext(scope: Scope, allowedPanels: readonly PanelLabel[]) {
   const data = buildDashboardData(scope);
@@ -62,15 +63,15 @@ export function buildAssistantContext(scope: Scope, allowedPanels: readonly Pane
     allowedTabs: allowedPanels.filter((panel) => panel !== "Overview"),
     restrictedTabs: (
       [
-        "Executive Summary",
+        "Performance Snapshot",
         "Market Access",
         "Marketing",
         "Field Activity",
         "What-If Simulator",
       ] as const
     ).filter((panel) => !can(panel)),
-    ...(can("Executive Summary") && {
-      executiveSummary: {
+    ...(can("Performance Snapshot") && {
+      performanceSnapshot: {
         insights: executive.executiveInsights,
         launchHealth: executive.executiveMetrics.map(
           ({ title, value, caption, status, detail }) => ({
@@ -175,6 +176,27 @@ export function buildAssistantContext(scope: Scope, allowedPanels: readonly Pane
         hcpEmailFunnel: marketing.emailFunnel,
         socialByMonth: marketing.socialByMonth,
         paidSearchByMonth: marketing.searchByMonth,
+        // Channel and tactic attribution, launch to date: each month's net sales split by tactic.
+        attribution: (() => {
+          const attribution = buildAttribution(launchToDate());
+          const dollars = (value: number) => Math.round(value);
+          return {
+            method:
+              "Digital tactics earn net sales for the site visits they bring (revenuePerVisit); the rest of each month's net sales is split between field promotion, access and patient services, and base demand (otherShares). Each month adds up to its net sales. ROI is attributed net sales per $1 of spend. Use it for channel ROI questions; it is a demo attribution model.",
+            rules: attributionRules,
+            digitalSharePct: attribution.digitalSharePct,
+            digitalRoi: attribution.digitalRoi,
+            tactics: attribution.tactics.map((row) => ({ ...row, revenue: dollars(row.revenue) })),
+            byMonth: attribution.months.map(({ spend: _spend, ...row }) =>
+              Object.fromEntries(
+                Object.entries(row).map(([key, value]) => [
+                  key,
+                  typeof value === "number" ? dollars(value) : value,
+                ]),
+              ),
+            ),
+          };
+        })(),
         regionalSummary: [...regional.marketing.rows, regional.marketing.total],
       },
     }),
@@ -232,7 +254,7 @@ export function buildAssistantContext(scope: Scope, allowedPanels: readonly Pane
           marketingActions,
           hvaActions,
           paidSearchStory: {
-            note: "Website visits fell from Jul to Sep only because paid search lost clicks: its cost per click rose while monthly spend held at about $12k, the pattern of a competitor bidding on our branded and condition terms from mid-August. Lost visits, HVAs and rep requests are counted against July's search clicks; extraBudgetPerMonth buys back the lost clicks at today's cost per click. winBack is the What-If Simulator's spend for buying back the peak month's search clicks (the question 'What if paid search clicks go back to 6,020?'): quote it for what winning back search costs.",
+            note: "Website visits fell from Jul to Sep only because paid search lost clicks: its cost per click rose while monthly spend held at about $12k, the pattern of a competitor bidding on our branded and condition terms from mid-August. Lost visits, HVAs and rep requests are counted against July's search clicks; extraBudgetPerMonth buys back the lost clicks at today's cost per click. winBack is the What-If Simulator's spend for buying back the peak month's search clicks (the question 'What if paid search clicks go back to 6,020?'): quote it for what winning back search costs, the net sales it adds and its ROI.",
             ...searchStory,
             winBack: searchWinBack(marketingBaselineFor("Nation")),
           },

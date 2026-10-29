@@ -36,7 +36,7 @@ const cardValue = (title: string | RegExp) => {
 };
 
 describe("Tabs follow the geography and time period filters", () => {
-  it("Executive Summary", () => {
+  it("Performance Snapshot", () => {
     for (const scope of [nation, northeastQtd]) {
       const data = buildDashboardData(scope);
       renderTab(ExecutivePanel, scope);

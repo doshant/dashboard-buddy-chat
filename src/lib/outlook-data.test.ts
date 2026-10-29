@@ -27,7 +27,7 @@ import { attentionSignalsFor } from "@/lib/outlook-data";
 import { tablesFromMarkdown } from "@/lib/table-export";
 
 const answer = (question: string) => resolveDashboardAnswer(question).response;
-const visibleTabs = ["Executive Summary", "Market Access", "Marketing", "Field Activity"];
+const visibleTabs = ["Performance Snapshot", "Market Access", "Marketing", "Field Activity"];
 
 describe("Predictive and prescriptive questions", () => {
   it("starts every tab with descriptive questions only", () => {
@@ -167,9 +167,9 @@ describe("Predictive and prescriptive questions", () => {
 });
 
 describe("Signals flagged when the assistant opens", () => {
-  it("flags the sales gap on the Executive Summary while sales trail forecast", () => {
+  it("flags the sales gap on the Performance Snapshot while sales trail forecast", () => {
     const jenny = profiles.find((profile) => profile.name === "Jenny")!;
-    const signals = attentionSignalsFor("Executive Summary", jenny.panels);
+    const signals = attentionSignalsFor("Performance Snapshot", jenny.panels);
     expect(signals.map((signal) => signal.question)).toContain(
       "What should we do to close the sales gap?",
     );

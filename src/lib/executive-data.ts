@@ -22,7 +22,7 @@ import {
 } from "@/lib/scope";
 import { shapeTrend, type TrendView } from "@/lib/trend";
 
-// The Executive Summary only re-presents figures owned by the other tabs, plus monthly referrals
+// The Performance Snapshot only re-presents figures owned by the other tabs, plus monthly referrals
 // so fill and abandonment rates can be trended. Targets are demo planning assumptions. Built from
 // the other tabs' data for one geography and period.
 

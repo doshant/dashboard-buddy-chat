@@ -56,7 +56,7 @@ describe("Live assistant data", () => {
 
     const jeff = buildAssistantContext(nation, profile("Jeff").panels);
     expect(jeff.marketing).toBeDefined();
-    expect(jeff.executiveSummary).toBeDefined();
+    expect(jeff.performanceSnapshot).toBeDefined();
     expect(jeff.marketAccess).toBeUndefined();
     expect(jeff.fieldActivity).toBeUndefined();
     expect(jeff.outlook.marketAccess).toBeUndefined();

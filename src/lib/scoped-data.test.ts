@@ -199,7 +199,7 @@ describe("Choosing a month", () => {
   });
 });
 
-describe("Executive Summary trend lines", () => {
+describe("Performance Snapshot trend lines", () => {
   const trendOf = (period: TimePeriod, key: string) =>
     buildDashboardData({ geography: "Nation", period }).executive.executiveMetrics.find(
       (metric) => metric.key === key,

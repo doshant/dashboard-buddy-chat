@@ -31,7 +31,7 @@ export const {
 } = buildLaunchData(nationalLaunchRaw);
 
 export const panelLabels = [
-  "Executive Summary",
+  "Performance Snapshot",
   "Overview",
   "Market Access",
   "Marketing",
@@ -42,7 +42,7 @@ export const panelLabels = [
 export type PanelLabel = (typeof panelLabels)[number];
 
 // Demo profiles simulating role-based access: each sees only its permitted tabs.
-// Every profile gets the Executive Summary alongside its own tabs.
+// Every profile gets the Performance Snapshot alongside its own tabs.
 export const profiles: {
   id: string;
   name: string;
@@ -56,14 +56,14 @@ export const profiles: {
     name: "Jeff",
     role: "Marketing Manager",
     avatar: "🧑🏼‍💼",
-    panels: ["Executive Summary", "Marketing", "What-If Simulator"],
+    panels: ["Performance Snapshot", "Marketing", "What-If Simulator"],
   },
   {
     id: "bob",
     name: "Bob",
     role: "Market Access Lead",
     avatar: "👨🏽‍💼",
-    panels: ["Executive Summary", "Market Access", "What-If Simulator"],
+    panels: ["Performance Snapshot", "Market Access", "What-If Simulator"],
   },
 ];
 
@@ -75,7 +75,7 @@ export function accessSummary(panels: readonly PanelLabel[]) {
 type DashboardAnswer = { title: string; response: string; suggestions: string[] };
 
 const starterQuestionsByPanel: Partial<Record<PanelLabel, string[]>> = {
-  "Executive Summary": [
+  "Performance Snapshot": [
     "Summarize the key insights from this dashboard.",
     "What is our fill rate?",
     "What is our abandonment rate?",
@@ -200,7 +200,7 @@ export const marketingWhatIfQuestions = [
 export function starterQuestionsFor(
   panel: string,
   panels: readonly PanelLabel[] = panelLabels,
-  scenario?: "Marketing" | "Market Access",
+  scenario?: string,
 ) {
   if (panel === "What-If Simulator") {
     const marketing = panels.includes("Marketing") ? marketingWhatIfQuestions : [];
@@ -209,6 +209,8 @@ export function starterQuestionsFor(
       : [];
     if (scenario === "Marketing" && marketing.length) return marketing;
     if (scenario === "Market Access" && access.length) return access;
+    // Preview scenarios (Sales, Patient Services, Medical) have no questions yet.
+    if (scenario) return [];
     return marketing.length && access.length
       ? [...marketing.slice(0, 2), ...access.slice(0, 2)]
       : [...marketing, ...access];
@@ -876,6 +878,7 @@ export const dashboardAnswers = {
       "  - Impressions: 280k → 170k (-39%)",
       "  - Clicks: 6,020 → 3,400 (-44%)",
       "- **Spend held at about $12k a month**, so the cap, not the ads, now limits reach",
+      "- **Search ROI fell from 11.0x in Jul to 6.2x in Sep**: each dollar now buys fewer visits",
       "- Rising cost per click at flat spend from mid-August is the pattern of a competitor bidding on the same branded and condition terms",
       "",
       "| Month | Impressions | Clicks | Cost per click | Spend |",
@@ -891,9 +894,10 @@ export const dashboardAnswers = {
   searchCost: {
     title: "Cost of the paid search drop",
     response: lines(
-      "- **Since Jul the drop has cost about 3,740 site visits, 176 high value actions and 11 rep requests**",
+      "- **Since Jul the drop has cost about 3,740 site visits, 176 high value actions and 11 rep requests**, worth about $82k in net sales",
       "  - At September's pace it loses about 2,620 visits a month",
       "- **Winning it back costs about $9.3k more a month** at today's $3.55 per click: monthly spend goes from $41.6k to $50.9k, or $55.8k more over the next six months",
+      "  - The What-If Simulator projects about $346k more net sales over the same six months: about 6.2x the added spend",
       "",
       "| Lost since Jul | Count |",
       "| --- | ---: |",
@@ -922,7 +926,7 @@ export const dashboardAnswers = {
       "| Fund it from social if the budget is fixed | Social costs $3.80 per visit | Same spend, slightly more visits |",
       "| Lean on HCP email while search recovers | Each +1 pt of click rate ≈ 467 site visits | Covers part of the gap |",
       "",
-      "> See what it does to spend: what if paid search clicks go back to 6,020?",
+      "> See the impact and ROI: what if paid search clicks go back to 6,020?",
     ),
     suggestions: [
       "What if paid search clicks go back to 6,020?",
@@ -1300,15 +1304,15 @@ export const dashboardAnswers = {
 type Topic = keyof typeof dashboardAnswers;
 
 // The tabs whose data each answer draws on; the assistant answers when any of them is permitted.
-// Questions about figures shown on the Executive Summary are open to everyone who has that tab.
+// Questions about figures shown on the Performance Snapshot are open to everyone who has that tab.
 const topicPanels: Record<Topic, readonly PanelLabel[] | null> = {
-  forecast: ["Overview", "Executive Summary"],
-  fillRate: ["Executive Summary"],
-  abandonment: ["Executive Summary"],
-  active: ["Overview", "Executive Summary"],
-  pending: ["Overview", "Executive Summary"],
-  prescribers: ["Overview", "Executive Summary"],
-  summary: ["Overview", "Executive Summary"],
+  forecast: ["Overview", "Performance Snapshot"],
+  fillRate: ["Performance Snapshot"],
+  abandonment: ["Performance Snapshot"],
+  active: ["Overview", "Performance Snapshot"],
+  pending: ["Overview", "Performance Snapshot"],
+  prescribers: ["Overview", "Performance Snapshot"],
+  summary: ["Overview", "Performance Snapshot"],
   priorAuth: ["Market Access"],
   paDenials: ["Market Access"],
   paDenialActions: ["Market Access"],
@@ -1333,18 +1337,18 @@ const topicPanels: Record<Topic, readonly PanelLabel[] | null> = {
   fieldCallMix: ["Field Activity"],
   fieldFunnel: ["Field Activity"],
   fieldRegional: ["Field Activity"],
-  salesOutlook: ["Executive Summary", "Overview"],
-  salesActions: ["Executive Summary", "Overview"],
+  salesOutlook: ["Performance Snapshot", "Overview"],
+  salesActions: ["Performance Snapshot", "Overview"],
   supplyOutlook: ["Market Access"],
   timeToDoseActions: ["Market Access"],
   trafficOutlook: ["Marketing"],
   marketingActions: ["Marketing"],
   reachOutlook: ["Field Activity"],
   fieldActions: ["Field Activity"],
-  salesMilestone: ["Executive Summary", "Overview"],
-  activeOutlook: ["Executive Summary", "Overview"],
-  freeToPaidActions: ["Executive Summary", "Overview"],
-  over30Actions: ["Executive Summary", "Overview"],
+  salesMilestone: ["Performance Snapshot", "Overview"],
+  activeOutlook: ["Performance Snapshot", "Overview"],
+  freeToPaidActions: ["Performance Snapshot", "Overview"],
+  over30Actions: ["Performance Snapshot", "Overview"],
   inventoryRisk: ["Market Access"],
   timeOutlook: ["Market Access"],
   stopActions: ["Market Access"],
@@ -1406,7 +1410,7 @@ function topicFor(question: string): Topic {
     if (/reach|hcp/.test(normalized)) return "reachOutlook";
     if (/sales|revenue/.test(normalized)) return "salesOutlook";
   }
-  // Executive Summary measures.
+  // Performance Snapshot measures.
   if (/fill rate|\bfilled\b/.test(normalized)) return "fillRate";
   if (/abandon/.test(normalized)) return "abandonment";
   // Field questions first: "region", "engagement" and "HCP" also appear in other topics.
@@ -1480,14 +1484,14 @@ export function canAsk(question: string, allowedPanels: readonly PanelLabel[]) {
 }
 
 // Keeps follow-up suggestions inside the profile's access and, for answers from a single tab such
-// as Marketing or Market Access, inside that tab so their questions don't mix. Executive Summary
+// as Marketing or Market Access, inside that tab so their questions don't mix. Performance Snapshot
 // answers span the launch, so they can lead into other tabs. Tops up from the tab's own starters.
 function permittedSuggestions(
   suggestions: string[],
   allowedPanels: readonly PanelLabel[],
   home: readonly PanelLabel[] | null = null,
 ) {
-  const tabSpecific = home && !home.includes("Executive Summary");
+  const tabSpecific = home && !home.includes("Performance Snapshot");
   const homePanels = tabSpecific ? allowedPanels.filter((panel) => home.includes(panel)) : [];
   const sameTab = (question: string) =>
     !homePanels.length ||

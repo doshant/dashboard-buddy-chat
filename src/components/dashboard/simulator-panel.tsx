@@ -1,10 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { RotateCcw } from "lucide-react";
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
-  LabelList,
   Line,
   LineChart,
   ReferenceLine,
@@ -25,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import {
+  formatNetSales,
   marketingBaselineFor,
   marketingLeverRanges,
   marketingPresets,
@@ -65,14 +63,15 @@ const dollars = (value: number) =>
   Math.abs(value) >= 1000
     ? `$${(Math.abs(value) / 1000).toFixed(1)}k`
     : `$${Math.abs(value).toFixed(0)}`;
-const signedDollars = (value: number) =>
-  `${value > 0 ? "+" : value < 0 ? "−" : ""}${dollars(value)}`;
 const changePct = (value: number, today: number) =>
   today ? Math.round(((value - today) / today) * 100) : 0;
 
-// Which levers the simulator shows. Each profile sees the scenarios for the tabs it can open.
+// Which levers the simulator shows. Each profile sees the live scenarios for the tabs it can
+// open, then the preview scenarios, which show the feature's wider scope with example levers.
 export const simulatorScenarios = ["Marketing", "Market Access"] as const;
-export type SimulatorScenario = (typeof simulatorScenarios)[number];
+export const previewScenarios = ["Sales", "Patient Services", "Medical"] as const;
+export type SimulatorScenario =
+  (typeof simulatorScenarios)[number] | (typeof previewScenarios)[number];
 
 // The scenario and levers live with the page, so they survive tab changes and a what-if question
 // in the assistant can set them. null levers mean today's values for the selected geography.
@@ -101,10 +100,147 @@ export function SimulatorPanel() {
   // The simulator always starts from launch-to-date figures for the selected geography.
   const accessBaseline = useMemo(() => simulatorBaselineFor(scope.geography), [scope.geography]);
   const marketingBaseline = useMemo(() => marketingBaselineFor(scope.geography), [scope.geography]);
-  return scenario === "Marketing" ? (
-    <MarketingSimulator baseline={marketingBaseline} where={where} />
-  ) : (
-    <AccessSimulator baseline={accessBaseline} where={where} />
+  if (scenario === "Marketing")
+    return <MarketingSimulator baseline={marketingBaseline} where={where} />;
+  if (scenario === "Market Access")
+    return <AccessSimulator baseline={accessBaseline} where={where} />;
+  return <PreviewSimulator scenario={scenario} />;
+}
+
+// Example levers and outcomes for the preview scenarios; the sliders are not live yet.
+const previews: Record<
+  (typeof previewScenarios)[number],
+  { levers: { label: string; today: string; rule: string }[]; outputs: string[]; summary: string }
+> = {
+  Sales: {
+    summary: "How field effort turns into prescribers and net sales",
+    levers: [
+      {
+        label: "Rep Calls per Target HCP a Month",
+        today: "Call frequency on the target list",
+        rule: "More calls on high-potential HCPs lift new prescribers",
+      },
+      {
+        label: "Target HCP List Size",
+        today: "HCPs on the call plan",
+        rule: "Adding HCPs widens reach but thins call frequency",
+      },
+      {
+        label: "Speaker Programs a Quarter",
+        today: "Peer-to-peer programs held",
+        rule: "Programs convert one-time prescribers into repeat prescribers",
+      },
+    ],
+    outputs: ["New prescribers", "Repeat prescribers", "Projected net sales", "Field ROI"],
+  },
+  "Patient Services": {
+    summary: "How hub support speeds patients to therapy and keeps them on it",
+    levers: [
+      {
+        label: "Hub Enrollment Rate",
+        today: "Share of referrals enrolled in hub services",
+        rule: "Enrolled patients start faster and abandon less",
+      },
+      {
+        label: "Benefits Verification Turnaround",
+        today: "Days to complete benefits verification",
+        rule: "Each day faster shortens time to first dose",
+      },
+      {
+        label: "Copay Program Uptake",
+        today: "Share of eligible patients on copay support",
+        rule: "Lower out-of-pocket cost lifts persistence",
+      },
+    ],
+    outputs: ["Time to first dose", "Abandonment rate", "Persistence", "Projected net sales"],
+  },
+  Medical: {
+    summary: "How medical engagement builds clinical confidence and advocacy",
+    levers: [
+      {
+        label: "MSL Engagements a Month",
+        today: "Scientific exchanges with key opinion leaders",
+        rule: "More engagement grows KOL advocacy",
+      },
+      {
+        label: "Medical Education Events",
+        today: "Grand rounds and CME programs a quarter",
+        rule: "Education raises diagnosis and referral rates",
+      },
+      {
+        label: "Medical Information Response Time",
+        today: "Days to answer HCP medical inquiries",
+        rule: "Faster answers support confident prescribing",
+      },
+    ],
+    outputs: ["KOL reach", "Scientific share of voice", "Referral rate", "Projected net sales"],
+  },
+};
+
+function PreviewSimulator({ scenario }: { scenario: (typeof previewScenarios)[number] }) {
+  const preview = previews[scenario];
+  return (
+    <section
+      aria-label="What-if simulator"
+      className="grid grid-cols-1 gap-4 sm:min-h-[calc(100dvh-11.5rem)] sm:grid-cols-[minmax(220px,1fr)_minmax(0,2fr)]"
+    >
+      <DashboardPanel
+        title="Assumptions"
+        subtitle="Example levers for this view"
+        className="flex min-w-0 flex-col"
+        action={
+          <span className="shrink-0 rounded-full bg-secondary px-2.5 py-1 text-[11px] font-semibold text-primary">
+            Coming soon
+          </span>
+        }
+      >
+        <ScenarioSelect />
+        <div className="grid flex-1 auto-rows-fr gap-3">
+          {preview.levers.map((lever) => (
+            <div
+              key={lever.label}
+              className="flex flex-col justify-center gap-2.5 rounded-lg border border-dashed border-border bg-secondary/20 px-4 py-3.5"
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold">{lever.label}</span>
+                <span className="text-base font-bold text-muted-foreground">–</span>
+              </div>
+              <Slider aria-label={lever.label} value={[50]} min={0} max={100} disabled />
+              <div className="space-y-1.5 text-[13px] leading-relaxed text-muted-foreground">
+                <p>
+                  <span className="font-semibold text-foreground">Today:</span> {lever.today}
+                </p>
+                <p>
+                  <span className="font-semibold text-foreground">Rule:</span> {lever.rule}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </DashboardPanel>
+
+      <DashboardPanel
+        title={`${scenario} What-If`}
+        subtitle={preview.summary}
+        className="flex min-w-0 flex-col"
+      >
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-secondary/20 px-6 py-10 text-center">
+          <p className="text-lg font-bold text-primary">{scenario} levers are coming soon</p>
+          <p className="max-w-md text-sm text-muted-foreground">
+            The same simulator will model {scenario.toLowerCase()} levers against the launch data,
+            projecting the outcomes below alongside Marketing and Market Access.
+          </p>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {preview.outputs.map((output) => (
+            <ResultTile key={output} label={output} value="–" detail="Projected impact" tone={0} />
+          ))}
+        </div>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Preview of the What-If Simulator's scope; levers and figures are not live yet.
+        </p>
+      </DashboardPanel>
+    </section>
   );
 }
 
@@ -170,144 +306,38 @@ function MarketingSimulator({ baseline, where }: { baseline: MarketingBaseline; 
           />
         </>
       }
-      chartTitle="Monthly Marketing Spend: Today vs Scenario"
-      chartSubtitle={`${where} · spend a month by channel, priced at ${month}'s rates`}
-      chart={<SpendComparison result={result} />}
+      chartTitle="Projected Net Sales: Current vs Simulated"
+      chartSubtitle={`${where} · $M a month · actual Jul–Sep, projected ${simulatorMonths[0]}–${simulatorMonths[simulatorMonths.length - 1]}`}
+      chart={<SalesChart chart={result.chart} />}
       tiles={
         <>
           <ResultTile
-            label="Monthly Spend"
-            value={dollars(result.spend)}
-            detail={`${dollars(result.spendToday)} today`}
-            tone={0}
+            label="Projected Δ Net Sales"
+            value={`${result.deltaNetSales < 0 ? "−" : "+"}${formatNetSales(result.deltaNetSales)}`}
+            detail={`Next 6 months: $${result.simulatedNetSalesM}M vs $${result.currentNetSalesM}M`}
+            tone={result.deltaNetSales}
           />
           <ResultTile
-            label="Change a Month"
-            value={signedDollars(result.deltaSpend)}
-            detail={`${result.deltaSpendPct > 0 ? "+" : ""}${result.deltaSpendPct}% vs today`}
-            tone={-result.deltaSpend}
+            label="Projected Incremental Paid Patients"
+            value={signed(result.incrementalPatients)}
+            detail={`Patients on therapy the added net sales pay for`}
+            tone={result.incrementalPatients}
           />
           <ResultTile
-            label="Change over 6 Months"
-            value={signedDollars(result.deltaSpendSixMonths)}
-            detail={`${simulatorMonths[0]}–${simulatorMonths[simulatorMonths.length - 1]}`}
-            tone={-result.deltaSpendSixMonths}
-          />
-          <ResultTile
-            label="Cost per Site Visit"
-            value={`$${result.costPerVisit.toFixed(2)}`}
-            detail={`$${result.costPerVisitToday.toFixed(2)} today · ${result.visits.toLocaleString("en-US")} visits a month`}
-            tone={result.costPerVisitToday - result.costPerVisit}
+            label="Projected Marketing ROI"
+            value={result.roi === null ? "–" : `${result.roi}x`}
+            detail={
+              result.roi !== null
+                ? `Net sales per $1 of added spend (${dollars(result.deltaSpendSixMonths)} over 6 months)`
+                : result.deltaSpendSixMonths < 0
+                  ? `Spend falls by ${dollars(result.deltaSpendSixMonths)} over 6 months`
+                  : "No added spend"
+            }
+            tone={result.roi ?? 0}
           />
         </>
       }
-      note="Spend follows how each channel is bought: social per 1,000 impressions, search per click and HCP email per send."
     />
-  );
-}
-
-// Today's and the scenario's monthly spend as two stacked columns, with the channel detail below.
-const spendSeries = [
-  { key: "email", label: "HCP email", color: "var(--series-1)", swatch: "bg-series-1" },
-  { key: "social", label: "Social media", color: "var(--series-2)", swatch: "bg-series-2" },
-  { key: "search", label: "Paid search", color: "var(--series-3)", swatch: "bg-series-3" },
-] as const;
-
-function SpendComparison({ result }: { result: ReturnType<typeof simulateMarketing> }) {
-  const column = (label: string, pick: (row: (typeof result.channels)[number]) => number) => ({
-    label,
-    ...Object.fromEntries(result.channels.map((row) => [row.key, pick(row)])),
-    total: result.channels.reduce((sum, row) => sum + pick(row), 0),
-  });
-  const data = [column("Today", (row) => row.spendToday), column("Scenario", (row) => row.spend)];
-  return (
-    <div className="flex flex-1 flex-col">
-      <ChartLegend
-        textSize="text-[13px]"
-        items={spendSeries.map((item) => ({ label: item.label, className: item.swatch }))}
-      />
-      <div className="min-h-56 flex-1">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 24, right: 20, bottom: 4, left: 0 }} barSize={96}>
-            <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 4" />
-            <XAxis dataKey="label" tick={chartTick} tickLine={false} axisLine={false} />
-            <YAxis
-              tick={chartTick}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(value: number) => (value ? `$${value / 1000}k` : "$0")}
-            />
-            <Tooltip
-              {...chartTooltip}
-              cursor={{ fill: "var(--color-muted)", opacity: 0.4 }}
-              formatter={(value) => dollars(Number(value))}
-            />
-            {spendSeries.map((item, i) => (
-              <Bar
-                key={item.key}
-                dataKey={item.key}
-                name={item.label}
-                stackId="spend"
-                fill={item.color}
-                isAnimationActive={false}
-              >
-                {i === spendSeries.length - 1 && (
-                  <LabelList
-                    dataKey="total"
-                    position="top"
-                    formatter={(value: unknown) => dollars(Number(value))}
-                    style={{ ...chartTick, fontWeight: 700, fill: "var(--color-foreground)" }}
-                  />
-                )}
-              </Bar>
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-      <table className="mt-2 w-full text-xs tabular-nums">
-        <thead>
-          <tr className="border-b border-border text-[10px] uppercase text-muted-foreground">
-            <th scope="col" className="py-1.5 text-left font-semibold">
-              Channel
-            </th>
-            <th scope="col" className="py-1.5 text-center font-semibold">
-              Spend today
-            </th>
-            <th scope="col" className="py-1.5 text-center font-semibold">
-              Scenario
-            </th>
-            <th scope="col" className="py-1.5 text-center font-semibold">
-              Change
-            </th>
-            <th scope="col" className="py-1.5 text-center font-semibold">
-              Site visits
-            </th>
-            <th scope="col" className="py-1.5 text-center font-semibold">
-              Cost per visit
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {result.channels.map((row) => (
-            <tr key={row.key} className="border-b border-border/60">
-              <th scope="row" className="py-1.5 text-left font-semibold">
-                {row.label}
-              </th>
-              <td className="py-1.5 text-center">{dollars(row.spendToday)}</td>
-              <td className="py-1.5 text-center">{dollars(row.spend)}</td>
-              <td className="py-1.5 text-center">{signedDollars(row.spend - row.spendToday)}</td>
-              <td className="py-1.5 text-center">
-                {row.visitsToday.toLocaleString("en-US")} → {row.visits.toLocaleString("en-US")}
-              </td>
-              <td className="py-1.5 text-center">
-                {row.costPerVisitToday === null ? "–" : `$${row.costPerVisitToday.toFixed(2)}`} →{" "}
-                {row.costPerVisit === null ? "–" : `$${row.costPerVisit.toFixed(2)}`}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }
 
@@ -342,7 +372,7 @@ function AccessSimulator({ baseline, where }: { baseline: SimulatorBaseline; whe
             onChange={(value) => setLevers({ ...levers, referralToPaidPct: value })}
           />
           <Lever
-            label="Time to First Approved PA"
+            label="Time to First PA"
             value={levers.paDays}
             display={`${levers.paDays} days`}
             delta={levers.paDays - base.paDays}
@@ -439,7 +469,7 @@ function SimulatorLayout<Levers>({
   chartSubtitle: string;
   chart: ReactNode;
   tiles: ReactNode;
-  note: string;
+  note?: string;
 }) {
   return (
     // Assumptions (a third of the width, at least 220px) and the chart stay side by side, filling the height
@@ -484,8 +514,11 @@ function SimulatorLayout<Levers>({
 
       <DashboardPanel title={chartTitle} subtitle={chartSubtitle} className="flex min-w-0 flex-col">
         {chart}
-        <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">{tiles}</div>
-        <p className="mt-2 text-[11px] text-muted-foreground">{note}</p>
+        {/* One row of equal tiles, however many the view shows. */}
+        <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-flow-col lg:auto-cols-fr lg:grid-cols-none">
+          {tiles}
+        </div>
+        {note && <p className="mt-2 text-[11px] text-muted-foreground">{note}</p>}
       </DashboardPanel>
     </section>
   );
@@ -598,7 +631,7 @@ function SalesTiles({
         tone={result.deltaNetSalesM}
       />
       <ResultTile
-        label="Incremental Paid Patients"
+        label="Projected Incremental Paid Patients"
         value={signed(result.incrementalPatients)}
         detail={`${result.paidStartsPerMonth} new paid a month vs ${result.baselinePaidStartsPerMonth}`}
         tone={result.incrementalPatients}

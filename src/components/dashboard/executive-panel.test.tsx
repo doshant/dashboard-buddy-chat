@@ -14,7 +14,7 @@ vi.stubGlobal(
 
 afterEach(cleanup);
 
-describe("Executive Summary panel", () => {
+describe("Performance Snapshot panel", () => {
   it("opens one measure's detail row at a time", () => {
     render(<ExecutivePanel />);
     expect(screen.queryByText("Filled, of known outcomes")).toBeNull();

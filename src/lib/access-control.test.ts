@@ -18,20 +18,24 @@ const marketingQuestion = "How are our emails performing?";
 const fieldQuestion = "How many calls has the field team made?";
 
 describe("Demo profile access", () => {
-  it("gives Jenny every tab, and Bob and Jeff the Executive Summary, their own tab and the simulator", () => {
+  it("gives Jenny every tab, and Bob and Jeff the Performance Snapshot, their own tab and the simulator", () => {
     expect(byName("Jenny").panels).toEqual(panelLabels);
     expect(byName("Bob").panels).toEqual([
-      "Executive Summary",
+      "Performance Snapshot",
       "Market Access",
       "What-If Simulator",
     ]);
-    expect(byName("Jeff").panels).toEqual(["Executive Summary", "Marketing", "What-If Simulator"]);
+    expect(byName("Jeff").panels).toEqual([
+      "Performance Snapshot",
+      "Marketing",
+      "What-If Simulator",
+    ]);
   });
 
-  it("gives every profile the Executive Summary, and answers its questions for everyone", () => {
+  it("gives every profile the Performance Snapshot, and answers its questions for everyone", () => {
     for (const profile of profiles) {
-      expect(profile.panels).toContain("Executive Summary");
-      for (const question of starterQuestionsFor("Executive Summary")) {
+      expect(profile.panels).toContain("Performance Snapshot");
+      for (const question of starterQuestionsFor("Performance Snapshot")) {
         expect(resolveDashboardAnswer(question, profile.panels).response).not.toContain(
           "isn't part of your access",
         );
@@ -52,7 +56,7 @@ describe("Demo profile access", () => {
     const bob = byName("Bob").panels;
     expect(resolveDashboardAnswer(marketAccessQuestion, bob).response).toContain("95%");
     expect(resolveDashboardAnswer(fieldQuestion, bob).response).toBe(
-      "That question draws on Field Activity data, which isn't part of your access. You can ask about Executive Summary, Market Access, What-If Simulator.",
+      "That question draws on Field Activity data, which isn't part of your access. You can ask about Performance Snapshot, Market Access, What-If Simulator.",
     );
     expect(resolveDashboardAnswer(marketingQuestion, bob).response).not.toContain("46.7k");
 

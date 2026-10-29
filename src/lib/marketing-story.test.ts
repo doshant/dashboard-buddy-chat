@@ -4,6 +4,7 @@ import { formatSpend } from "@/lib/marketing-data";
 import {
   marketingBaselineFor,
   marketingWhatIfFor,
+  formatNetSales,
   searchWinBack,
   simulateMarketing,
 } from "@/lib/marketing-simulator-data";
@@ -66,6 +67,9 @@ describe("Marketing demo story: the paid search drop", () => {
     expect(text).toContain(`${dollars(searchStory.peakCpc)} → ${dollars(searchStory.latestCpc)}`);
     expect(text).toContain(`(${searchStory.impressionsChangePct}%)`);
     expect(text).toContain(`(${searchStory.clicksChangePct}%)`);
+    expect(text).toContain(
+      `Search ROI fell from ${searchStory.peakRoi.toFixed(1)}x in ${searchStory.peakMonth} to ${searchStory.latestRoi.toFixed(1)}x in ${searchStory.latestMonth}`,
+    );
     for (const row of searchStory.months) {
       expect(text).toContain(
         `| ${row.month} | ${row.impressionsK}k | ${count(row.clicks)} | ${dollars(row.cpc)} | ${formatSpend(row.spend)} |`,
@@ -96,6 +100,9 @@ describe("Marketing demo story: the paid search drop", () => {
     const winBack = searchWinBack(nation);
     expect(winBack.clicksScenario).toBe(levers.searchClicks);
     expect(winBack.extraSpendPerMonth).toBe(result.deltaSpend);
+    expect(text).toContain(`about ${formatNetSales(result.deltaNetSales)} more net sales`);
+    expect(text).toContain(`worth about ${formatNetSales(searchStory.lostNetSales)} in net sales`);
+    expect(text).toContain(`about ${result.roi}x the added spend`);
   });
 
   it("recommends a fix sized from the data", () => {

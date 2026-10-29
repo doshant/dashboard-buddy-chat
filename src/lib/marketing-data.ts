@@ -29,6 +29,16 @@ export function formatCount(value: number) {
 // follows the counts.
 export const spendRates = { emailPerSend: 1.5, socialCpm: 25 };
 
+// Channel attribution (see attribution-data): net sales each digital visit brings, and how the
+// rest of each month's net sales splits between the other tactics.
+export const attributionRules = {
+  // Net sales per site visit each digital tactic brings. Search visits show intent and HCP email
+  // clicks come from prescribers, so both are worth more than a social visit.
+  revenuePerVisit: { search: 22, social: 11, email: 120 },
+  // Shares of the net sales digital doesn't account for.
+  otherShares: { field: 0.4, access: 0.25, base: 0.35 },
+};
+
 export const spendChannels = [
   { key: "email", label: "HCP email" },
   { key: "social", label: "Social media" },

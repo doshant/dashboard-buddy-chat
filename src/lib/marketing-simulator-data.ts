@@ -1,14 +1,27 @@
-// What-If Simulator, Marketing scenario: how monthly marketing spend changes when the volumes and
-// rates move. The inputs are social media impressions, paid search clicks and the HCP email click
-// rate. Spend follows how each channel is bought: social per 1,000 impressions, search per click
-// and HCP email per email sent, so the email click rate changes results, not spend. Baselines
-// are the selected geography's latest month, so "today" matches the Marketing tab.
+// What-If Simulator, Marketing scenario: the impact and ROI of changing social media impressions,
+// paid search clicks and the HCP email click rate. Each input changes the site visits a channel
+// brings, and the channel attribution grid (attribution-data) values each visit in net sales, so
+// added net sales over the next six months follow the same model as the channel ROIs. Spend
+// follows how each channel is bought (social per 1,000 impressions, search per click, HCP email per
+// send), and ROI is the added net sales over the added spend. Baselines are the selected
+// geography's latest month, so "today" matches the Marketing tab.
 
+import { attributionRules } from "@/lib/attribution-data";
 import { marketingWhatIfQuestions } from "@/lib/dashboard-data";
 import { spendRates } from "@/lib/marketing-data";
 import { buildDashboardData, type DashboardData } from "@/lib/scoped-data";
 import type { Geography } from "@/lib/scope";
-import { downWords, improveWords, simulatorMonths, upWords, whatIfCue } from "@/lib/simulator-data";
+import {
+  downWords,
+  improveWords,
+  netPerVial,
+  projectPaidVials,
+  salesProjection,
+  simulatorBaseline,
+  simulatorMonths,
+  upWords,
+  whatIfCue,
+} from "@/lib/simulator-data";
 
 export type MarketingLevers = {
   socialImpressionsK: number;
@@ -17,11 +30,18 @@ export type MarketingLevers = {
 };
 
 const round1 = (value: number) => Math.round(value * 10) / 10;
+const round2 = (value: number) => Math.round(value * 100) / 100;
 const cents = (value: number) => Math.round(value * 100) / 100;
+
+// Net sales impact in $M from $1M, otherwise in $k, so small changes don't read as $0.0M.
+export const formatNetSales = (dollars: number) =>
+  Math.abs(dollars) >= 1e6
+    ? `$${(Math.abs(dollars) / 1e6).toFixed(1)}M`
+    : `$${Math.round(Math.abs(dollars) / 1000)}k`;
 
 // `data` must be a launch-to-date build, so the monthly series cover every month since launch.
 export function marketingBaseline(data: DashboardData) {
-  const { socialByMonth, searchByMonth, emailByMonth } = data.marketing;
+  const { socialByMonth, searchByMonth, emailByMonth, visitsBySourceByMonth } = data.marketing;
   const social = socialByMonth[socialByMonth.length - 1]!;
   const search = searchByMonth[searchByMonth.length - 1]!;
   const email = emailByMonth[emailByMonth.length - 1]!;
@@ -33,12 +53,15 @@ export function marketingBaseline(data: DashboardData) {
       searchClicks: search.clicks,
       emailClickRatePct: email.clickRate,
     } satisfies MarketingLevers,
+    sales: simulatorBaseline(data),
     // Social site visits per impression this month.
     socialClickThrough: social.impressionsK ? social.clicks / (social.impressionsK * 1000) : 0,
     searchCpc: search.cpc,
     searchPeak: { month: peak.month, clicks: peak.clicks },
     emailSent: email.sent,
     emailDelivered: email.delivered,
+    // Site visits the three channels don't bring (unpaid search, direct, referrals) stay as today.
+    otherVisits: visitsBySourceByMonth[visitsBySourceByMonth.length - 1]?.other ?? 0,
   };
 }
 
@@ -91,7 +114,47 @@ export function simulateMarketing(baseline: MarketingBaseline, levers: Marketing
   const visitsToday = total(today, "visits");
   const visits = total(scenario, "visits");
   const deltaSpend = cents(spend - spendToday);
+  const deltaSpendSixMonths = cents(deltaSpend * simulatorMonths.length);
+
+  // Impact: each added visit is worth its channel's net sales per visit from the attribution grid.
+  const { revenuePerVisit } = attributionRules;
+  const deltaRevenuePerMonth = scenario.reduce(
+    (sum, row, i) =>
+      sum +
+      (row.visits - today[i]!.visits) * revenuePerVisit[row.key as keyof typeof revenuePerVisit],
+    0,
+  );
+  const deltaRevenue = deltaRevenuePerMonth * simulatorMonths.length;
+  // The current trajectory, with the added net sales on top of each projected month.
+  const current = salesProjection(
+    baseline.sales,
+    projectPaidVials(baseline.sales, baseline.sales.paidStartsPerMonth),
+  );
+  const chart = current.chart.map((row) =>
+    (simulatorMonths as readonly string[]).includes(row.month)
+      ? { ...row, simulated: round2(row.current + deltaRevenuePerMonth / 1e6) }
+      : row,
+  );
+  // Paid patients on therapy the added net sales pay for, at today's doses per patient.
+  const revenuePerPatientMonth = netPerVial * baseline.sales.dosesPerPatientMonth;
+  const incrementalPatients = revenuePerPatientMonth
+    ? Math.round(deltaRevenuePerMonth / revenuePerPatientMonth)
+    : 0;
+  // Net sales per $1 of added spend; with no added spend there is no ROI to show.
+  const roi = deltaSpendSixMonths > 0 ? round1(deltaRevenue / deltaSpendSixMonths) : null;
+
   return {
+    chart,
+    currentNetSalesM: current.currentNetSalesM,
+    simulatedNetSalesM: round1(current.currentNetSalesM + deltaRevenue / 1e6),
+    deltaNetSalesM: round1(deltaRevenue / 1e6),
+    deltaNetSales: Math.round(deltaRevenue),
+    deltaRevenuePerMonth: Math.round(deltaRevenuePerMonth),
+    incrementalPatients,
+    baselinePaidStartsPerMonth: current.baselinePaidStartsPerMonth,
+    paidStartsPerMonth: round1(
+      baseline.sales.paidStartsPerMonth + incrementalPatients / simulatorMonths.length,
+    ),
     channels: scenario.map((row, i) => ({
       ...row,
       spendToday: today[i]!.spend,
@@ -103,11 +166,14 @@ export function simulateMarketing(baseline: MarketingBaseline, levers: Marketing
     spend,
     deltaSpend,
     deltaSpendPct: spendToday ? Math.round((deltaSpend / spendToday) * 100) : 0,
-    deltaSpendSixMonths: cents(deltaSpend * simulatorMonths.length),
+    deltaSpendSixMonths,
     visitsToday,
     visits,
+    siteVisitsToday: visitsToday + baseline.otherVisits,
+    siteVisits: visits + baseline.otherVisits,
     costPerVisitToday: visitsToday ? cents(spendToday / visitsToday) : 0,
     costPerVisit: visits ? cents(spend / visits) : 0,
+    roi,
   };
 }
 
@@ -133,16 +199,19 @@ export function marketingPresets(baseline: MarketingBaseline) {
   ];
 }
 
-// The Marketing scenario for the assistant: today's levers, the pricing, and each preset's result.
+// The Marketing scenario for the assistant: today's levers, the rules, and each preset's result.
 export function marketingSimulatorSummary(baseline: MarketingBaseline) {
   const today = simulateMarketing(baseline, baseline.levers);
   return {
-    output: "Monthly marketing spend, today vs scenario, by channel; and the change over 6 months",
+    output:
+      "Impact and ROI: projected net sales over the next 6 months, new paid patients, and ROI (added net sales ÷ added marketing spend)",
+    horizon: `Next 6 months (${simulatorMonths[0]}–${simulatorMonths[simulatorMonths.length - 1]})`,
     today: {
       month: baseline.month,
       ...baseline.levers,
       monthlySpend: today.spendToday,
-      siteVisitsPerMonth: today.visitsToday,
+      siteVisitsPerMonth: today.siteVisitsToday,
+      newPaidPatientsPerMonth: today.baselinePaidStartsPerMonth,
     },
     pricing: {
       socialPer1000Impressions: spendRates.socialCpm,
@@ -151,21 +220,20 @@ export function marketingSimulatorSummary(baseline: MarketingBaseline) {
       hcpEmailsSentPerMonth: baseline.emailSent,
     },
     rules: [
-      `Social spend is impressions × $${spendRates.socialCpm.toFixed(2)} per 1,000.`,
-      `Paid search spend is clicks × $${baseline.searchCpc.toFixed(2)}, this month's cost per click.`,
-      `HCP email spend is ${baseline.emailSent.toLocaleString("en-US")} emails a month × $${spendRates.emailPerSend.toFixed(2)}; the click rate changes site visits and cost per visit, not spend.`,
-      "Each social, search and email click is a site visit.",
+      "Each social, search and email click is a site visit; other site visits stay as today.",
+      `Added net sales come from the channel attribution grid: each paid search visit is worth $${attributionRules.revenuePerVisit.search}, a social visit $${attributionRules.revenuePerVisit.social} and an HCP email click $${attributionRules.revenuePerVisit.email} a month in net sales.`,
+      `Spend: social impressions × $${spendRates.socialCpm.toFixed(2)} per 1,000; search clicks × $${baseline.searchCpc.toFixed(2)}; HCP email is paid per send, so its click rate adds visits without adding spend.`,
+      "ROI is added net sales over the next 6 months divided by added marketing spend over the same months.",
     ],
     scenarios: marketingPresets(baseline).map(({ label, levers }) => {
       const result = simulateMarketing(baseline, levers);
       return {
         scenario: label,
         levers,
-        monthlySpend: result.spend,
-        changePerMonth: result.deltaSpend,
-        changeOverSixMonths: result.deltaSpendSixMonths,
-        siteVisitsPerMonth: result.visits,
-        costPerSiteVisit: result.costPerVisit,
+        addedNetSalesSixMonths: result.deltaNetSales,
+        incrementalPaidPatients: result.incrementalPatients,
+        addedSpendSixMonths: result.deltaSpendSixMonths,
+        roi: result.roi,
       };
     }),
   };
@@ -187,6 +255,9 @@ export function searchWinBack(baseline: MarketingBaseline) {
     extraSpendSixMonths: result.deltaSpendSixMonths,
     monthlySpendToday: result.spendToday,
     monthlySpendScenario: result.spend,
+    addedNetSalesSixMonths: result.deltaNetSales,
+    incrementalPaidPatients: result.incrementalPatients,
+    roi: result.roi,
   };
 }
 
@@ -295,17 +366,25 @@ export function marketingWhatIfAnswer(
   const { levers } = parsed;
   const result = simulateMarketing(baseline, levers);
   const moved = (Object.keys(base) as LeverKey[]).filter((key) => levers[key] !== base[key]);
-  const delta = result.deltaSpend;
+  const delta = result.deltaNetSales;
+  const patients = result.incrementalPatients;
+  const horizon = `${simulatorMonths[0]}–${simulatorMonths[simulatorMonths.length - 1]}`;
   const sign = (value: number) => (value > 0 ? "+" : value < 0 ? "-" : "");
+  const roiLine =
+    result.roi !== null
+      ? `- **ROI about ${result.roi}x**: ${sign(delta)}${formatNetSales(delta)} in net sales for ${money(result.deltaSpendSixMonths)} more marketing spend over 6 months`
+      : result.deltaSpendSixMonths < 0
+        ? `- **Spend falls by ${money(result.deltaSpendSixMonths)}** over 6 months`
+        : "- **No added spend**: HCP email is paid per send, so a better click rate is pure upside";
 
   // Short headlines with one fact per sub-point, the same shape as the other answers.
   const bullets = [
     delta === 0
-      ? `- **Monthly spend stays at ${money(result.spendToday)}**`
-      : `- **Monthly spend ${delta > 0 ? "rises" : "falls"} by about ${money(delta)}** (${money(result.spendToday)} → ${money(result.spend)}, ${sign(delta)}${Math.abs(result.deltaSpendPct)}%)`,
-    `  - Over the next 6 months: ${sign(delta)}${money(result.deltaSpendSixMonths)}`,
-    `  - Site visits a month: ${result.visitsToday.toLocaleString("en-US")} → ${result.visits.toLocaleString("en-US")}`,
-    `  - Cost per site visit: $${result.costPerVisitToday.toFixed(2)} → $${result.costPerVisit.toFixed(2)}`,
+      ? `- **No change to projected net sales** (${horizon})`
+      : `- **${delta > 0 ? "Adds" : "Loses"} about ${formatNetSales(delta)} in net sales** (${horizon})`,
+    `  - ${Math.abs(patients)} ${patients >= 0 ? "more" : "fewer"} paid patients over 6 months`,
+    `  - Site visits a month: ${result.siteVisitsToday.toLocaleString("en-US")} → ${result.siteVisits.toLocaleString("en-US")}`,
+    roiLine,
     `- **Scenario${where === "National" ? "" : `, ${where}`}**`,
     ...(moved.length
       ? moved.map(
@@ -315,25 +394,39 @@ export function marketingWhatIfAnswer(
       : ["  - No change from today"]),
   ];
   const notes = [
-    `Spend is priced at ${baseline.month}'s rates: social $${spendRates.socialCpm.toFixed(2)} per 1,000 impressions, search $${baseline.searchCpc.toFixed(2)} per click and HCP email $${spendRates.emailPerSend.toFixed(2)} per send, so email rates change visits, not spend. The What-If Simulator tab now shows this scenario; move the sliders to try other values.`,
+    `Demo estimate, not a forecast: added visits are valued with the channel attribution grid (paid search $${attributionRules.revenuePerVisit.search}, social $${attributionRules.revenuePerVisit.social} and HCP email $${attributionRules.revenuePerVisit.email} per visit), and spend is priced at ${baseline.month}'s rates. The What-If Simulator tab now shows this scenario; move the sliders to try other values.`,
   ];
   if (parsed.capped.length) {
     notes.push(
       `${parsed.capped.map((key) => leverNames[key]).join(" and ")} ${parsed.capped.length > 1 ? "were" : "was"} capped at the slider range.`,
     );
   }
+  const row = (label: string, today: string, scenarioValue: string) =>
+    `| ${label} | ${today} | ${scenarioValue} |`;
   return {
     title: "What-if scenario",
     response: [
       ...bullets,
       "",
-      "| Channel | Spend today | Scenario | Change |",
-      "| --- | ---: | ---: | ---: |",
-      ...result.channels.map(
-        (row) =>
-          `| ${row.label} | ${money(row.spendToday)} | ${money(row.spend)} | ${sign(row.spend - row.spendToday)}${money(row.spend - row.spendToday)} |`,
+      "| Measure | Today | Scenario |",
+      "| --- | ---: | ---: |",
+      row(
+        "Net sales, next 6 months",
+        `$${result.currentNetSalesM.toFixed(1)}M`,
+        `$${result.simulatedNetSalesM.toFixed(1)}M`,
       ),
-      `| **Total a month** | **${money(result.spendToday)}** | **${money(result.spend)}** | **${sign(delta)}${money(delta)}** |`,
+      row(
+        "New paid patients a month",
+        `${result.baselinePaidStartsPerMonth}`,
+        `${result.paidStartsPerMonth}`,
+      ),
+      row(
+        "Site visits a month",
+        result.siteVisitsToday.toLocaleString("en-US"),
+        result.siteVisits.toLocaleString("en-US"),
+      ),
+      row("Marketing spend a month", money(result.spendToday), money(result.spend)),
+      row("ROI", "–", result.roi === null ? "–" : `${result.roi}x`),
       "",
       notes.join(" "),
     ].join("\n"),

@@ -263,7 +263,7 @@ export const improveWords = /\b(improve[sd]?|better|speed(?:s|ed)? up)\b/;
 
 const leverNames: Record<LeverKey, string> = {
   referralToPaidPct: "Referral → Paid",
-  paDays: "Time to first approved PA",
+  paDays: "Time to first PA",
   firstDoseDays: "Time to first dose",
   oopPerDose: "Out-of-pocket per dose",
 };

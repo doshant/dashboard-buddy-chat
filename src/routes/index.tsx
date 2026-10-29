@@ -49,6 +49,7 @@ import { FieldPanel } from "@/components/dashboard/field-panel";
 import {
   SimulatorLeversContext,
   SimulatorPanel,
+  previewScenarios,
   simulatorScenarios,
   type SimulatorScenario,
 } from "@/components/dashboard/simulator-panel";
@@ -183,7 +184,7 @@ const panels: {
   // Which header filters the tab's data responds to; unsupported ones are greyed out.
   filters?: { geography: boolean; period: boolean };
 }[] = [
-  { label: "Executive Summary", icon: Gauge, Content: ExecutivePanel },
+  { label: "Performance Snapshot", icon: Gauge, Content: ExecutivePanel },
   {
     label: "Overview",
     icon: LayoutDashboard,
@@ -224,9 +225,9 @@ function LaunchTracker() {
   const [simulatorLevers, setSimulatorLevers] = useState<SimulatorLevers | null>(null);
   const [marketingLevers, setMarketingLevers] = useState<MarketingLevers | null>(null);
   const [chosenScenario, setScenario] = useState<SimulatorScenario>("Marketing");
-  const scenarios = useMemo(() => {
+  const scenarios = useMemo<SimulatorScenario[]>(() => {
     const allowed = profiles.find((item) => item.id === profileId)?.panels ?? [];
-    return simulatorScenarios.filter((item) => allowed.includes(item));
+    return [...simulatorScenarios.filter((item) => allowed.includes(item)), ...previewScenarios];
   }, [profileId]);
   const scenario = scenarios.includes(chosenScenario)
     ? chosenScenario
@@ -247,7 +248,7 @@ function LaunchTracker() {
     setSimulatorLevers(null);
     setMarketingLevers(null);
   }, [geographyName]);
-  const [activePanel, setActivePanel] = useState<PanelLabel>("Executive Summary");
+  const [activePanel, setActivePanel] = useState<PanelLabel>("Performance Snapshot");
   // Wide screens start with the assistant docked open; narrow screens start with it closed.
   const [docked, setDocked] = useState(true);
   const [chatOpen, setChatOpen] = useState(true);
@@ -850,10 +851,14 @@ function LaunchTracker() {
                   </div>
                 </div>
               )}
-              <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase text-muted-foreground">
-                <Sparkles size={13} className="text-primary" /> Suggested questions
-              </p>
-              <QuestionSuggestions questions={starterQuestions} onQuestion={sendQuestion} />
+              {starterQuestions.length > 0 && (
+                <>
+                  <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase text-muted-foreground">
+                    <Sparkles size={13} className="text-primary" /> Suggested questions
+                  </p>
+                  <QuestionSuggestions questions={starterQuestions} onQuestion={sendQuestion} />
+                </>
+              )}
             </div>
           )}
 

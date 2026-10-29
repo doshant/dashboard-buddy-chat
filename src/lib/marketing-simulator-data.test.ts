@@ -12,6 +12,8 @@ import {
   simulateMarketing,
 } from "@/lib/marketing-simulator-data";
 import { regionNames, type Geography } from "@/lib/scope";
+import { attributionRules } from "@/lib/attribution-data";
+import { searchStory } from "@/lib/outlook-data";
 
 const nation = marketingBaselineFor("Nation");
 const latestSearch = searchByMonth[searchByMonth.length - 1]!;
@@ -104,15 +106,43 @@ describe("What-If Simulator, Marketing levers", () => {
     expect(parseMarketingWhatIf("What if PA is 5 days faster?", nation)).toBeNull();
   });
 
-  it("answers marketing what-ifs with the simulator's own spend", () => {
-    const money = (value: number) => `$${(Math.abs(value) / 1000).toFixed(1)}k`;
+  it("values added visits with the channel attribution grid", () => {
+    const { revenuePerVisit } = attributionRules;
+    const search = simulateMarketing(nation, { ...nation.levers, searchClicks: 6_020 });
+    expect(search.deltaRevenuePerMonth).toBe(2_620 * revenuePerVisit.search);
+    expect(search.deltaNetSales).toBe(2_620 * revenuePerVisit.search * 6);
+    expect(search.roi).toBe(
+      Math.round((search.deltaNetSales / search.deltaSpendSixMonths) * 10) / 10,
+    );
+    // Buying back clicks at today's cost per click returns the latest month's search ROI.
+    expect(search.roi).toBe(searchStory.latestRoi);
+
+    // HCP email is paid per send: a better click rate adds net sales with no ROI denominator.
+    const email = simulateMarketing(nation, { ...nation.levers, emailClickRatePct: 4.5 });
+    expect(email.deltaNetSales).toBeGreaterThan(0);
+    expect(email.roi).toBeNull();
+
+    const fewer = simulateMarketing(nation, { ...nation.levers, socialImpressionsK: 400 });
+    expect(fewer.deltaNetSales).toBeLessThan(0);
+    expect(fewer.roi).toBeNull();
+
+    const today = simulateMarketing(nation, nation.levers);
+    expect(today.deltaNetSales).toBe(0);
+    expect(today.roi).toBeNull();
+    for (const row of today.chart) expect(row.simulated).toBe(row.current);
+  });
+
+  it("answers marketing what-ifs with the simulator's own impact and ROI", () => {
     for (const question of marketingWhatIfQuestions) {
       const whatIf = marketingWhatIfFor(question, "Nation")!;
       expect(whatIf, question).not.toBeNull();
       const result = simulateMarketing(nation, whatIf.levers);
       expect(whatIf.answer.response, question).toContain(
-        `**${money(result.spendToday)}** | **${money(result.spend)}**`,
+        `$${result.simulatedNetSalesM.toFixed(1)}M |`,
       );
+      if (result.roi !== null) {
+        expect(whatIf.answer.response, question).toContain(`ROI about ${result.roi}x`);
+      }
       expect(whatIf.answer.suggestions).not.toContain(question);
     }
   });

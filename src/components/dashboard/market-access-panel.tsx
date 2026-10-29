@@ -45,7 +45,7 @@ const outcomeColors = {
 
 const timeSeries: Series[] = [
   { key: "firstDose", label: "Referral to first dose (non-EAP)", color: "series-1" },
-  { key: "firstApprovedPa", label: "Referral to first approved PA", color: "series-3" },
+  { key: "firstApprovedPa", label: "Referral to first PA", color: "series-3" },
 ];
 
 export function MarketAccessPanel() {
@@ -125,7 +125,7 @@ export function MarketAccessPanel() {
           }}
         />
         <StatCard
-          title="Time to First Approved PA"
+          title="Time to First PA"
           Icon={CalendarClock}
           value={`${timeToTherapySummary.firstApprovedPa.median} days`}
           detail={`Median from referral · mean ${timeToTherapySummary.firstApprovedPa.mean} days · all payers`}
