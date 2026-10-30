@@ -1,9 +1,11 @@
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { RotateCcw } from "lucide-react";
 import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceArea,
+  ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -11,7 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { axisTick, tooltipProps } from "@/components/dashboard/chart-theme";
-import { ChartLegend, DashboardPanel } from "@/components/dashboard/primitives";
+import { ChartLegend, DashboardPanel, ViewToggle } from "@/components/dashboard/primitives";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import {
   Select,
@@ -26,6 +28,10 @@ import {
   marketingBaselineFor,
   marketingLeverRanges,
   marketingPresets,
+  marketingResponseCurve,
+  netRoiPct,
+  breakEvenPoints,
+  marginalRoi,
   simulateMarketing,
   type MarketingBaseline,
   type MarketingLevers,
@@ -252,6 +258,8 @@ function MarketingSimulator({ baseline, where }: { baseline: MarketingBaseline; 
   const result = simulateMarketing(baseline, levers);
   const set = (change: Partial<MarketingLevers>) => setMarketingLevers({ ...levers, ...change });
   const month = baseline.month;
+  const [view, setView] = useState<"sales" | "roi">("sales");
+  const breakEven = breakEvenPoints(baseline);
 
   return (
     <SimulatorLayout
@@ -272,7 +280,7 @@ function MarketingSimulator({ baseline, where }: { baseline: MarketingBaseline; 
             delta={changePct(levers.socialImpressionsK, base.socialImpressionsK)}
             unit="%"
             baseline={`${impressions(base.socialImpressionsK)} in ${month}`}
-            rule="Costs $25.00 per 1,000 impressions; about 0.7% click through to the site"
+            rule={`$25.00 per 1,000 impressions; about 0.7% click through. ROI rises, then falls (ad fatigue); below break-even past ${impressions(breakEven.socialImpressionsK)}`}
             range={ranges.socialImpressionsK}
             formatBound={impressions}
             step={1}
@@ -285,7 +293,7 @@ function MarketingSimulator({ baseline, where }: { baseline: MarketingBaseline; 
             delta={changePct(levers.searchClicks, base.searchClicks)}
             unit="%"
             baseline={`${base.searchClicks.toLocaleString("en-US")} in ${month}, ${baseline.searchPeak.clicks.toLocaleString("en-US")} at the ${baseline.searchPeak.month} peak`}
-            rule={`Costs $${baseline.searchCpc.toFixed(2)} per click (${month}'s rate); each click is a site visit`}
+            rule={`$${baseline.searchCpc.toFixed(2)} per click (${month}). ROI peaks at the ${baseline.searchPeak.month} peak; below break-even past ${breakEven.searchClicks.toLocaleString("en-US")}`}
             range={ranges.searchClicks}
             formatBound={(value) => value.toLocaleString("en-US")}
             step={1}
@@ -306,9 +314,34 @@ function MarketingSimulator({ baseline, where }: { baseline: MarketingBaseline; 
           />
         </>
       }
-      chartTitle="Projected Net Sales: Current vs Simulated"
-      chartSubtitle={`${where} · $M a month · actual Jul–Sep, projected ${simulatorMonths[0]}–${simulatorMonths[simulatorMonths.length - 1]}`}
-      chart={<SalesChart chart={result.chart} />}
+      chartTitle={
+        view === "sales"
+          ? "Projected Net Sales: Current vs Simulated"
+          : "Marketing ROI Curve: Net ROI on the Next Dollar"
+      }
+      chartSubtitle={
+        view === "sales"
+          ? `${where} · $M a month · actual Jul–Sep, projected ${simulatorMonths[0]}–${simulatorMonths[simulatorMonths.length - 1]}`
+          : `${where} · (net sales − spend) ÷ spend for the next $1, by channel, from ${month}`
+      }
+      chartAction={
+        <ViewToggle
+          label="Chart view"
+          options={[
+            { key: "sales", label: "Net Sales" },
+            { key: "roi", label: "ROI Curve" },
+          ]}
+          value={view}
+          onChange={setView}
+        />
+      }
+      chart={
+        view === "sales" ? (
+          <SalesChart chart={result.chart} />
+        ) : (
+          <RoiCurveChart baseline={baseline} levers={levers} />
+        )
+      }
       tiles={
         <>
           <ResultTile
@@ -325,7 +358,9 @@ function MarketingSimulator({ baseline, where }: { baseline: MarketingBaseline; 
           />
           <ResultTile
             label="Projected Marketing ROI"
-            value={result.roi === null ? "–" : `${result.roi}x`}
+            value={
+              result.roi === null ? "–" : `${result.roi < 0 ? "−" : ""}${Math.abs(result.roi)}x`
+            }
             detail={
               result.roi !== null
                 ? `Net sales per $1 of added spend (${dollars(result.deltaSpendSixMonths)} over 6 months)`
@@ -455,6 +490,7 @@ function SimulatorLayout<Levers>({
   chartTitle,
   chartSubtitle,
   chart,
+  chartAction,
   tiles,
   note,
 }: {
@@ -468,6 +504,7 @@ function SimulatorLayout<Levers>({
   chartTitle: string;
   chartSubtitle: string;
   chart: ReactNode;
+  chartAction?: ReactNode;
   tiles: ReactNode;
   note?: string;
 }) {
@@ -512,7 +549,12 @@ function SimulatorLayout<Levers>({
         <div className="grid flex-1 auto-rows-fr gap-3">{levers}</div>
       </DashboardPanel>
 
-      <DashboardPanel title={chartTitle} subtitle={chartSubtitle} className="flex min-w-0 flex-col">
+      <DashboardPanel
+        title={chartTitle}
+        subtitle={chartSubtitle}
+        action={chartAction}
+        className="flex min-w-0 flex-col"
+      >
         {chart}
         {/* One row of equal tiles, however many the view shows. */}
         <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-flow-col lg:auto-cols-fr lg:grid-cols-none">
@@ -521,6 +563,123 @@ function SimulatorLayout<Levers>({
         {note && <p className="mt-2 text-[11px] text-muted-foreground">{note}</p>}
       </DashboardPanel>
     </section>
+  );
+}
+
+// The return on the next dollar as social or search spend rises, one channel at a time. Above 1x
+// the extra spend pays back; below it, net sales still rise but by less than the spend. Dots mark the
+// channels the sliders have moved up.
+function RoiCurveChart({
+  baseline,
+  levers,
+}: {
+  baseline: MarketingBaseline;
+  levers: MarketingLevers;
+}) {
+  const curve = useMemo(() => marketingResponseCurve(baseline), [baseline]);
+  const base = baseline.levers;
+  const roi = marginalRoi(baseline, levers);
+  const dots = [
+    levers.socialImpressionsK > base.socialImpressionsK && {
+      key: "social",
+      x: round1(((levers.socialImpressionsK - base.socialImpressionsK) * 25) / 1000),
+      y: netRoiPct(roi.social),
+      color: "var(--series-2)",
+    },
+    levers.searchClicks > base.searchClicks && {
+      key: "search",
+      x: round1(((levers.searchClicks - base.searchClicks) * baseline.searchCpc) / 1000),
+      y: netRoiPct(roi.search),
+      color: "var(--series-1)",
+    },
+  ].filter((dot) => dot !== false);
+  const pct = (value: number) => `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(value)}%`;
+
+  return (
+    <>
+      <ChartLegend
+        textSize="text-[13px]"
+        items={[
+          { label: "Paid search", className: "bg-series-1" },
+          { label: "Social media", className: "bg-series-2" },
+          { label: "Break-even (0%)", className: "bg-target" },
+        ]}
+      />
+      <div className="min-h-72 flex-1">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={curve} margin={{ top: 16, right: 20, bottom: 16, left: 8 }}>
+            <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 4" />
+            <XAxis
+              dataKey="spendK"
+              type="number"
+              domain={[0, "dataMax"]}
+              tick={chartTick}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(value: number) => `+$${value}k`}
+              label={{
+                value: "Added spend a month",
+                position: "insideBottom",
+                offset: -12,
+                ...chartTick,
+              }}
+            />
+            <YAxis
+              tick={chartTick}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={pct}
+              domain={[-100, "auto"]}
+            />
+            <Tooltip
+              {...chartTooltip}
+              cursor={{ stroke: "var(--color-border)" }}
+              labelFormatter={(value) => `+$${value}k spend a month`}
+              formatter={(value) => `${pct(Number(value))} net ROI`}
+            />
+            <ReferenceArea
+              y1={-100}
+              y2={0}
+              fill="var(--color-destructive)"
+              fillOpacity={0.06}
+              label={{
+                value: "Negative ROI: each extra $1 returns less than $1",
+                position: "insideBottomLeft",
+                ...chartTick,
+              }}
+            />
+            <ReferenceLine y={0} stroke="var(--target)" strokeWidth={2} strokeDasharray="5 4" />
+            <Line
+              dataKey="search"
+              name="Paid search"
+              stroke="var(--series-1)"
+              strokeWidth={2.5}
+              dot={false}
+              isAnimationActive={false}
+            />
+            <Line
+              dataKey="social"
+              name="Social media"
+              stroke="var(--series-2)"
+              strokeWidth={2.5}
+              dot={false}
+              isAnimationActive={false}
+            />
+            {dots.map((dot) => (
+              <ReferenceDot
+                key={dot.key}
+                x={dot.x}
+                y={dot.y}
+                r={6}
+                fill={dot.color}
+                stroke="var(--color-card)"
+                strokeWidth={2}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </>
   );
 }
 

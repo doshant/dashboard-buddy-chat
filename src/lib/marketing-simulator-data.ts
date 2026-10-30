@@ -67,17 +67,66 @@ export function marketingBaseline(data: DashboardData) {
 
 export type MarketingBaseline = ReturnType<typeof marketingBaseline>;
 
-// Slider ranges: volumes up to double today's (search far enough to win back its best month);
-// click rate up to at least 15%.
-export function marketingLeverRanges({ levers, searchPeak }: MarketingBaseline) {
+// Slider ranges: volumes up to double today's, and social and search far enough past their
+// break-even points to show the next dollar returning less than a dollar; click rate up to at
+// least 15%.
+export function marketingLeverRanges(baseline: MarketingBaseline) {
+  const { levers } = baseline;
+  const breakEven = breakEvenPoints(baseline);
+  const upTo = (today: number, past: number, step: number) =>
+    Math.ceil(Math.max(today * 2, past * 1.25) / step) * step;
   return {
-    socialImpressionsK: { min: 0, max: Math.ceil((levers.socialImpressionsK * 2) / 100) * 100 },
-    searchClicks: {
+    socialImpressionsK: {
       min: 0,
-      max: Math.ceil(Math.max(levers.searchClicks * 2, searchPeak.clicks * 1.5) / 1000) * 1000,
+      max: upTo(levers.socialImpressionsK, breakEven.socialImpressionsK, 100),
     },
+    searchClicks: { min: 0, max: upTo(levers.searchClicks, breakEven.searchClicks, 1000) },
     emailClickRatePct: { min: 0, max: Math.max(15, Math.ceil(levers.emailClickRatePct * 2)) },
   };
+}
+
+// Response curve on the paid channels: more spend never lowers net sales, but ROI first rises and
+// then falls. The value of the next added visit first climbs (enough reach to register with HCPs,
+// better ad positions) and then fades (social: ad fatigue at high frequency; search: lower-intent
+// clicks once the demand for our terms is bought), so added net sales keep rising and level off.
+// In added visits as a share u of the channel's scale, the next visit is worth
+// (start + u)·e^(−u/fade) of its full value, scaled so the scale's worth of added visits is worth
+// its full value; the fade puts the peak ROI at exactly the scale. Search's scale is the gap to its
+// best month, so ROI peaks at winning back proven demand. HCP email is paid per send, so a better
+// click rate keeps its full value.
+export const saturationRules = {
+  start: 0.2,
+  fade: 0.791,
+  // Social's scale: 40% more visits than today's.
+  socialScaleVsToday: 0.4,
+  // Search's scale when today is already at its best month: a quarter of that month's clicks.
+  searchScaleVsPeak: 0.25,
+};
+
+const { start, fade } = saturationRules;
+const curveArea = (u: number) =>
+  fade * (start + fade) * (1 - Math.exp(-u / fade)) - fade * u * Math.exp(-u / fade);
+// Worth of u scales of added visits, and of the next visit at u, in full-value visits.
+const curveValue = (u: number) => curveArea(u) / curveArea(1);
+const curveNext = (u: number) => ((start + u) * Math.exp(-u / fade)) / curveArea(1);
+
+// Each channel's scale in added visits; null where returns don't change with volume.
+function channelCurves(baseline: MarketingBaseline) {
+  const { levers, searchPeak } = baseline;
+  const socialVisits = levers.socialImpressionsK * 1000 * baseline.socialClickThrough;
+  const searchGap = searchPeak.clicks - levers.searchClicks;
+  return {
+    email: null,
+    social: socialVisits * saturationRules.socialScaleVsToday,
+    search: searchGap > 0 ? searchGap : searchPeak.clicks * saturationRules.searchScaleVsPeak,
+  };
+}
+
+// Net sales a month from changing a channel's visits by `added`, along its response curve. Fewer
+// visits lose their full value.
+function addedValue(added: number, valuePerVisit: number, scale: number | null) {
+  if (added <= 0 || scale === null) return added * valuePerVisit;
+  return scale * curveValue(added / scale) * valuePerVisit;
 }
 
 // One month of spend and site visits for each channel at the given levers.
@@ -104,6 +153,94 @@ function month(baseline: MarketingBaseline, levers: MarketingLevers) {
   ];
 }
 
+// Return on the next dollar of social or search spend at the given levers (1 = break-even).
+export function marginalRoi(baseline: MarketingBaseline, levers: MarketingLevers) {
+  const curves = channelCurves(baseline);
+  const { revenuePerVisit } = attributionRules;
+  const at = (added: number, scale: number, valuePerVisit: number, costPerVisit: number) =>
+    (valuePerVisit / costPerVisit) * curveNext(Math.max(0, added) / scale);
+  return {
+    social: at(
+      (levers.socialImpressionsK - baseline.levers.socialImpressionsK) *
+        1000 *
+        baseline.socialClickThrough,
+      curves.social,
+      revenuePerVisit.social,
+      spendRates.socialCpm / (1000 * baseline.socialClickThrough),
+    ),
+    search: at(
+      levers.searchClicks - baseline.levers.searchClicks,
+      curves.search,
+      revenuePerVisit.search,
+      baseline.searchCpc,
+    ),
+  };
+}
+
+// Where, past its peak, the next dollar of each channel returns just a dollar: spend past these
+// still adds net sales, but less than it costs.
+export function breakEvenPoints(baseline: MarketingBaseline) {
+  const curves = channelCurves(baseline);
+  const { revenuePerVisit } = attributionRules;
+  const pastPeak = (scale: number, fullRoi: number) => {
+    // The next visit's worth falls from its peak at u = fade − start; halve down to break-even.
+    let lo = Math.max(0, fade - start);
+    let hi = lo + 50;
+    if (fullRoi * curveNext(lo) <= 1) return 0;
+    for (let i = 0; i < 60; i++) {
+      const mid = (lo + hi) / 2;
+      if (fullRoi * curveNext(mid) > 1) lo = mid;
+      else hi = mid;
+    }
+    return scale * lo;
+  };
+  const socialVisits = pastPeak(
+    curves.social,
+    revenuePerVisit.social / (spendRates.socialCpm / (1000 * baseline.socialClickThrough)),
+  );
+  const searchVisits = pastPeak(curves.search, revenuePerVisit.search / baseline.searchCpc);
+  return {
+    socialImpressionsK:
+      Math.round(
+        (baseline.levers.socialImpressionsK + socialVisits / (1000 * baseline.socialClickThrough)) /
+          10,
+      ) * 10,
+    searchClicks: Math.round((baseline.levers.searchClicks + searchVisits) / 100) * 100,
+  };
+}
+
+// Net ROI on the next dollar, in %: what it adds in net sales less what it costs, over its cost.
+// Below 0%, more spend still adds net sales but less than it costs.
+export const netRoiPct = (grossRoi: number) => Math.round((grossRoi - 1) * 100);
+
+// The ROI curve: net ROI on the next dollar as social or search spend rises from today, one
+// channel at a time; 0% is break-even.
+export function marketingResponseCurve(baseline: MarketingBaseline) {
+  const ranges = marketingLeverRanges(baseline);
+  const base = baseline.levers;
+  const socialMax =
+    (ranges.socialImpressionsK.max - base.socialImpressionsK) * spendRates.socialCpm;
+  const searchMax = (ranges.searchClicks.max - base.searchClicks) * baseline.searchCpc;
+  const top = Math.max(socialMax, searchMax);
+  const step = 250;
+  const rows = [];
+  for (let spend = 0; spend <= top + step - 1; spend += step) {
+    const x = Math.min(spend, top);
+    const roi = marginalRoi(baseline, {
+      ...base,
+      socialImpressionsK: base.socialImpressionsK + x / spendRates.socialCpm,
+      searchClicks: base.searchClicks + x / baseline.searchCpc,
+    });
+    rows.push({
+      spendK: round1(x / 1000),
+      breakEven: 0,
+      social: x <= socialMax ? netRoiPct(roi.social) : null,
+      search: x <= searchMax ? netRoiPct(roi.search) : null,
+    });
+  }
+  return rows;
+}
+
 export function simulateMarketing(baseline: MarketingBaseline, levers: MarketingLevers) {
   const today = month(baseline, baseline.levers);
   const scenario = month(baseline, levers);
@@ -116,12 +253,17 @@ export function simulateMarketing(baseline: MarketingBaseline, levers: Marketing
   const deltaSpend = cents(spend - spendToday);
   const deltaSpendSixMonths = cents(deltaSpend * simulatorMonths.length);
 
-  // Impact: each added visit is worth its channel's net sales per visit from the attribution grid.
+  // Impact: added visits are valued from the attribution grid, with diminishing returns.
   const { revenuePerVisit } = attributionRules;
+  const headroom = channelCurves(baseline);
   const deltaRevenuePerMonth = scenario.reduce(
     (sum, row, i) =>
       sum +
-      (row.visits - today[i]!.visits) * revenuePerVisit[row.key as keyof typeof revenuePerVisit],
+      addedValue(
+        row.visits - today[i]!.visits,
+        revenuePerVisit[row.key as keyof typeof revenuePerVisit],
+        headroom[row.key as keyof typeof headroom],
+      ),
     0,
   );
   const deltaRevenue = deltaRevenuePerMonth * simulatorMonths.length;
@@ -222,6 +364,7 @@ export function marketingSimulatorSummary(baseline: MarketingBaseline) {
     rules: [
       "Each social, search and email click is a site visit; other site visits stay as today.",
       `Added net sales come from the channel attribution grid: each paid search visit is worth $${attributionRules.revenuePerVisit.search}, a social visit $${attributionRules.revenuePerVisit.social} and an HCP email click $${attributionRules.revenuePerVisit.email} a month in net sales.`,
+      `Response curve: more spend never lowers net sales, but ROI first rises and then falls. Added visits first gain value (enough reach to register with HCPs, better ad positions) and then lose it (social: ad fatigue; search: lower-intent clicks), so added net sales keep rising and level off. Paid search ROI peaks at the ${baseline.searchPeak.month} peak (${leverValue("searchClicks", baseline.searchPeak.clicks)}), where the demand is proven; social ROI peaks at about 40% more visits than today. Past the break-even point (social ${leverValue("socialImpressionsK", breakEvenPoints(baseline).socialImpressionsK)} impressions a month, search ${leverValue("searchClicks", breakEvenPoints(baseline).searchClicks)} clicks a month) each extra dollar still adds net sales, but less than a dollar. HCP email click rate keeps its full value.`,
       `Spend: social impressions × $${spendRates.socialCpm.toFixed(2)} per 1,000; search clicks × $${baseline.searchCpc.toFixed(2)}; HCP email is paid per send, so its click rate adds visits without adding spend.`,
       "ROI is added net sales over the next 6 months divided by added marketing spend over the same months.",
     ],
@@ -388,8 +531,17 @@ export function marketingWhatIfAnswer(
       : ["  - No change from today"]),
   ];
   const notes = [
-    `Demo estimate, not a forecast: added visits are valued with the channel attribution grid (paid search $${attributionRules.revenuePerVisit.search}, social $${attributionRules.revenuePerVisit.social} and HCP email $${attributionRules.revenuePerVisit.email} per visit), and spend is priced at ${baseline.month}'s rates. The What-If Simulator tab now shows this scenario; move the sliders to try other values.`,
+    `Demo estimate, not a forecast: added visits are valued with the channel attribution grid (paid search $${attributionRules.revenuePerVisit.search}, social $${attributionRules.revenuePerVisit.social} and HCP email $${attributionRules.revenuePerVisit.email} per visit) with diminishing returns on social and search, and spend is priced at ${baseline.month}'s rates. The What-If Simulator tab now shows this scenario; move the sliders to try other values.`,
   ];
+  const breakEven = breakEvenPoints(baseline);
+  const pastBreakEven = (["socialImpressionsK", "searchClicks"] as const).filter(
+    (key) => levers[key] > breakEven[key],
+  );
+  if (pastBreakEven.length) {
+    notes.unshift(
+      `${pastBreakEven.map((key) => `${leverNames[key]} is past its break-even point (${leverValue(key, breakEven[key])})`).join(" and ")}: net sales still rise, but each extra dollar there returns less than a dollar.`,
+    );
+  }
   if (parsed.capped.length) {
     notes.push(
       `${parsed.capped.map((key) => leverNames[key]).join(" and ")} ${parsed.capped.length > 1 ? "were" : "was"} capped at the slider range.`,
